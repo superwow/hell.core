@@ -303,7 +303,6 @@ void CreatureGroup::LeaderMoveTo(float x, float y, float z)
         Hellground::NormalizeMapCoord(dy);
 
         member->UpdateGroundPositionZ(dx, dy, dz);
-
         if (member->IsWithinDistInMap(m_leader, dist + MAX_DESYNC))
         {
             uint32 moveFlags = m_leader->GetUnitMovementFlags();
@@ -348,4 +347,27 @@ Creature* CreatureGroup::GetNextRandomCreatureGroupMember(Creature* member, floa
 
     uint32 randTarget = urand(0,nearMembers.size()-1);
     return nearMembers[randTarget];
+}
+
+bool CreatureGroup::AllUnitsReachedWaypoint() const
+{
+	auto numStillMovingUnits = m_movingUnits;
+
+	for (auto& member : m_members)
+	{
+		Creature* creature = m_leader->GetMap()->GetCreature(member.first);
+		if (!creature || creature == m_leader)
+			continue;
+
+		//Don't wait for dead units
+		if (creature->isDead())
+			--numStillMovingUnits;
+	}
+
+	std::count_if(std::begin(m_members), std::end(m_members), [](std::pair<uint64, FormationInfo*>& member)
+	{
+
+	});
+
+	return numStillMovingUnits == 0;
 }
