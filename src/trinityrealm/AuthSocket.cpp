@@ -372,12 +372,18 @@ bool AuthSocket::_HandleLogonChallenge()
 
     _login = (const char*)ch->I;
     _build = ch->build;
-    operatingSystem_ = (const char*)ch->os;
+    std::string operatingSystem_ = (const char*)ch->os;
 
     // Restore string order as its byte order is reversed
     std::reverse(operatingSystem_.begin(), operatingSystem_.end());
 
-    if (operatingSystem_.size() > 4 || (operatingSystem_ != "Win" && operatingSystem_ != "OSX" && (sRealmList.ChatboxOsName == "" || operatingSystem_ != sRealmList.ChatboxOsName))){
+    if (operatingSystem_ == "Win")
+        OS = CLIENT_OS_WIN;
+    else if (operatingSystem_ == "OSX")
+        OS = CLIENT_OS_OSX;
+    else if (sRealmList.ChatboxOsName != "" && operatingSystem_ == sRealmList.ChatboxOsName)
+        OS = CLIENT_OS_CHAT;
+    else {
         sLog.outLog(LOG_WARDEN, "Client %s got unsupported operating system (%s)", _login.c_str(), operatingSystem_.c_str());
         return false;
     }
@@ -467,11 +473,11 @@ bool AuthSocket::_HandleLogonChallenge()
             DEBUG_LOG("[AuthChallenge] Account '%s' is not locked to ip or frozen", _login.c_str());
             break;
     }
-
     ///- If the account is banned, reject the logon attempt
     QueryResultAutoPtr  banresult = AccountsDatabase.PQuery("SELECT punishment_date, expiration_date "
                                                             "FROM account_punishment "
-                                                            "WHERE account_id = '%u' AND punishment_type_id = '%u' AND (punishment_date = expiration_date OR expiration_date > UNIX_TIMESTAMP())", (*result)[1].GetUInt32(), PUNISHMENT_BAN);
+                                                            "WHERE account_id = '%u' AND punishment_type_id = '%u' AND active = 1 "
+                                                            "AND (punishment_date = expiration_date OR expiration_date > UNIX_TIMESTAMP())", (*result)[1].GetUInt32(), PUNISHMENT_BAN);
 
     if (banresult)
     {
@@ -490,7 +496,7 @@ bool AuthSocket::_HandleLogonChallenge()
         return true;
     }
 
-    QueryResultAutoPtr  emailbanresult = AccountsDatabase.PQuery("SELECT email FROM email_banned WHERE email = '%s'", (*result)[7].GetString());
+    QueryResultAutoPtr  emailbanresult = AccountsDatabase.PQuery("SELECT email FROM email_banned WHERE email = '%s'", (*result)[5].GetString());
     if (emailbanresult)
     {
         pkt << uint8(WOW_FAIL_BANNED);
@@ -709,22 +715,6 @@ bool AuthSocket::_HandleLogonProof()
     {
         sLog.outBasic("User '%s' successfully authenticated", _login.c_str());
 
-        uint8 OS;
-
-        if (!strcmp(operatingSystem_.c_str(), "Win"))
-            OS = CLIENT_OS_WIN;
-        else if (!strcmp(operatingSystem_.c_str(), "OSX"))
-            OS = CLIENT_OS_OSX;
-        else if (!strcmp(operatingSystem_.c_str(), "CHA") ||
-                 !strcmp(operatingSystem_.c_str(), "CHAT"))
-            OS = CLIENT_OS_CHAT;
-        else
-        {
-            OS = CLIENT_OS_UNKNOWN;
-            AccountsDatabase.escape_string(operatingSystem_);
-            sLog.outLog(LOG_WARDEN, "Client %s got unsupported operating system (%s)", _safelogin.c_str(), operatingSystem_.c_str());
-        }
-
         ///- Update the sessionkey, last_ip, last login time and reset number of failed logins in the account table for this account
         // No SQL injection (escaped user name) and IP address as received by socket
         const char* K_hex = K.AsHexStr();
@@ -753,7 +743,7 @@ bool AuthSocket::_HandleLogonProof()
         AccountsDatabase.DirectPExecute("UPDATE account_session SET session_key = '%s' WHERE account_id = '%u'", K_hex, accId);
 
         static SqlStatementID updateAccount;
-        SqlStatement stmt = AccountsDatabase.CreateStatement(updateAccount, "UPDATE account SET last_ip = ?, last_local_ip = ?, last_login = UNIX_TIMESTAMP(), locale_id = ?, failed_logins = 0, client_os_version_id = ? WHERE account_id = ?");
+        SqlStatement stmt = AccountsDatabase.CreateStatement(updateAccount, "UPDATE account SET last_ip = ?, last_local_ip = ?, last_login = NOW(), locale_id = ?, failed_logins = 0, client_os_version_id = ? WHERE account_id = ?");
         std::string tmpIp = get_remote_address();
         stmt.addString(tmpIp.c_str());
         stmt.addString(localIp_.c_str());
@@ -811,7 +801,7 @@ bool AuthSocket::_HandleLogonProof()
                     if (WrongPassBanType)
                     {
                         uint32 acc_id = fields[0].GetUInt32();
-                        AccountsDatabase.PExecute("INSERT INTO account_punishment VALUES ('%u', '%u', UNIX_TIMESTAMP(), UNIX_TIMESTAMP()+%u, 'Realm', 'Incorrect password for: %u times. Ban for: %u seconds')",
+                        AccountsDatabase.PExecute("INSERT INTO account_punishment VALUES ('%u', '%u', UNIX_TIMESTAMP(), UNIX_TIMESTAMP()+%u, 'Realm', 'Incorrect password for: %u times. Ban for: %u seconds', '1')",
                                                 acc_id, PUNISHMENT_BAN, WrongPassBanTime, failed_logins, WrongPassBanTime);
                         sLog.outBasic("[AuthChallenge] account %s got banned for '%u' seconds because it failed to authenticate '%u' times",
                             _login.c_str(), WrongPassBanTime, failed_logins);

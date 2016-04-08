@@ -156,6 +156,39 @@ enum ActionButtonType
     ACTION_BUTTON_ITEM  = 128
 };
 
+enum RestState
+{
+    REST_STATE_RESTED = 0x01,
+    REST_STATE_NORMAL = 0x02,
+    REST_STATE_RAF    = 0x06
+};
+
+enum ReferAFriendError
+{
+    ERR_REFER_A_FRIEND_NONE = 0x00,
+    ERR_REFER_A_FRIEND_NOT_REFERRED_BY = 0x01,
+    ERR_REFER_A_FRIEND_TARGET_TOO_HIGH = 0x02,
+    ERR_REFER_A_FRIEND_INSUFFICIENT_GRANTABLE_LEVELS = 0x03,
+    ERR_REFER_A_FRIEND_TOO_FAR = 0x04,
+    ERR_REFER_A_FRIEND_DIFFERENT_FACTION = 0x05,
+    ERR_REFER_A_FRIEND_NOT_NOW = 0x06,
+    ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I = 0x07,
+    ERR_REFER_A_FRIEND_NO_TARGET = 0x08,
+    ERR_REFER_A_FRIEND_NOT_IN_GROUP = 0x09,
+    ERR_REFER_A_FRIEND_SUMMON_LEVEL_MAX_I = 0x0A,
+    ERR_REFER_A_FRIEND_SUMMON_COOLDOWN = 0x0B,
+    ERR_REFER_A_FRIEND_INSUF_EXPAN_LVL = 0x0C,
+    ERR_REFER_A_FRIEND_SUMMON_OFFLINE_S = 0x0D
+};
+
+enum AccountLinkedState
+{
+    STATE_NOT_LINKED = 0x00,
+    STATE_REFER = 0x01,
+    STATE_REFERRAL = 0x02,
+    STATE_DUAL = 0x04,
+};
+
 #define  MAX_ACTION_BUTTONS 132                             //checked in 2.3.0
 
 typedef std::map<uint8,ActionButton> ActionButtonList;
@@ -527,6 +560,7 @@ enum PlayerExtraFlags
 {
     // gm abilities
     PLAYER_EXTRA_GM_ON              = 0x0001,
+    PLAYER_EXTRA_CAN_WHISP_TO_GM    = 0x0002,
     PLAYER_EXTRA_ACCEPT_WHISPERS    = 0x0004,
     PLAYER_EXTRA_TAXICHEAT          = 0x0008,
     PLAYER_EXTRA_GM_INVISIBLE       = 0x0010,
@@ -1000,6 +1034,8 @@ class HELLGROUND_EXPORT Player : public Unit
 
         bool isAcceptWhispers() const { return m_ExtraFlags & PLAYER_EXTRA_ACCEPT_WHISPERS; }
         void SetAcceptWhispers(bool on) { if (on) m_ExtraFlags |= PLAYER_EXTRA_ACCEPT_WHISPERS; else m_ExtraFlags &= ~PLAYER_EXTRA_ACCEPT_WHISPERS; }
+        bool canWhisperToGM() const { return m_ExtraFlags & PLAYER_EXTRA_CAN_WHISP_TO_GM; }
+        void SetCanWhisperToGM(bool on);
         bool isGameMaster() const { return m_ExtraFlags & PLAYER_EXTRA_GM_ON; }
         void SetGameMaster(bool on);
         bool isGMChat() const { return GetSession()->HasPermissions(PERM_GMT) && (m_ExtraFlags & PLAYER_EXTRA_GM_CHAT); }
@@ -1456,6 +1492,7 @@ class HELLGROUND_EXPORT Player : public Unit
         bool HasSpell(uint32 spell) const;
         TrainerSpellState GetTrainerSpellState(TrainerSpell const* trainer_spell) const;
         bool IsSpellFitByClassAndRace(uint32 spell_id) const;
+        void ChangeRace(uint8 new_raceID);
 
         void SendProficiency(uint8 pr1, uint32 pr2);
         void SendInitialSpells();
@@ -1506,7 +1543,7 @@ class HELLGROUND_EXPORT Player : public Unit
         }
         void AddSpellCooldown(uint32 spell_id, uint32 itemid, time_t end_time);
         void SendCooldownEvent(SpellEntry const *spellInfo);
-        void ProhibitSpellScholl(SpellSchoolMask idSchoolMask, uint32 unTimeMs);
+        void ProhibitSpellSchool(SpellSchoolMask idSchoolMask, uint32 unTimeMs);
         void RemoveSpellCooldown(uint32 spell_id, bool update = false);
         void RemoveArenaSpellCooldowns();
         void RemoveAllSpellCooldown();
@@ -1652,6 +1689,7 @@ class HELLGROUND_EXPORT Player : public Unit
         uint32 GetRangedCritDamageReduction(uint32 damage) const;
         uint32 GetSpellCritDamageReduction(uint32 damage) const;
         uint32 GetDotDamageReduction(uint32 damage) const;
+        int32 GetSpellPenetrationItemMod() const { return m_spellPenetrationItemMod; }
 
         float GetExpertiseDodgeOrParryReduction(WeaponAttackType attType) const;
         void UpdateBlockPercentage();
@@ -1675,7 +1713,7 @@ class HELLGROUND_EXPORT Player : public Unit
         void BuildCreateUpdateBlockForPlayer(UpdateData *data, Player *target) const;
         void DestroyForPlayer(Player *target) const;
         void SendDelayResponse(const uint32);
-        void SendLogXPGain(uint32 GivenXP,Unit* victim,uint32 RestXP);
+        void SendLogXPGain(uint32 GivenXP, Unit* victim, uint32 BonusXP, bool ReferAFriend);
 
         //notifiers
         void SendAttackSwingCantAttack();
@@ -1781,6 +1819,36 @@ class HELLGROUND_EXPORT Player : public Unit
         void UpdateSkillsForLevel();
         void UpdateSkillsToMaxSkillsForLevel();             // for .levelup
         void ModifySkillBonus(uint32 skillid,int32 val, bool talent);
+
+        /*********************************************************/
+        /***              REFER-A-FRIEND SYSTEM                ***/
+        /*********************************************************/
+        void SendReferFriendError(ReferAFriendError err, Player * target = NULL);
+        ReferAFriendError GetReferFriendError(Player * target, bool summon);
+        void AccessGrantableLevel(ObjectGuid guid)
+        {
+            m_curGrantLevelGiverGuid = guid;
+        }
+        bool IsAccessGrantableLevel(ObjectGuid guid)
+        {
+            return m_curGrantLevelGiverGuid == guid;
+        }
+        uint32 GetGrantableLevels()
+        {
+            return m_GrantableLevelsCount;
+        }
+        void ChangeGrantableLevels(uint8 increase = 0);
+        bool CheckRAFConditions();
+        AccountLinkedState GetAccountLinkedState();
+        bool IsReferAFriendLinked(Player * target);
+        void LoadAccountLinkedState();
+        std::vector<uint32> m_referredAccounts;
+        std::vector<uint32> m_referalAccounts;
+
+        // Refer-A-Friend
+        ObjectGuid m_curGrantLevelGiverGuid;
+
+        int32 m_GrantableLevelsCount;
 
         /*********************************************************/
         /***                 ANTICHEAT SYSTEM                  ***/
@@ -2023,6 +2091,7 @@ class HELLGROUND_EXPORT Player : public Unit
         void UpdateSpeakTime();
         bool CanSpeak() const;
         void ChangeSpeakTime(int utime);
+        bool IsTrollmuted() const;
 
         /*********************************************************/
         /***                 VARIOUS SYSTEMS                   ***/
@@ -2342,6 +2411,8 @@ class HELLGROUND_EXPORT Player : public Unit
         int32 m_SpellModRemoveCount;
         EnchantDurationList m_enchantDuration;
         ItemDurationList m_itemDuration;
+
+        int32 m_spellPenetrationItemMod;
 
         uint64 m_resurrectGUID;
         uint32 m_resurrectMap;

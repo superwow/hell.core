@@ -41,8 +41,8 @@ ChatCommand * ChatHandler::getCommandTable()
 {
     static ChatCommand accountSetCommandTable[] =
     {
-        { "addon",          PERM_ADM,       true,   &ChatHandler::HandleAccountSetAddonCommand,     "", NULL },
-        { "gmlevel",        PERM_CONSOLE,   true,   &ChatHandler::HandleAccountSetGmLevelCommand,   "", NULL },
+        { "addon",          PERM_HIGH_GMT,  true,   &ChatHandler::HandleAccountSetAddonCommand,     "", NULL },
+        { "permissions",    PERM_HIGH_GMT,  true,   &ChatHandler::HandleAccountSetPermissionsCommand,"", NULL },
         { "password",       PERM_CONSOLE,   true,   &ChatHandler::HandleAccountSetPasswordCommand,  "", NULL },
         { NULL,             0,              false,  NULL,                                           "", NULL }
     };
@@ -56,12 +56,21 @@ ChatCommand * ChatHandler::getCommandTable()
         { NULL,             0,                  false,  NULL,                                               "", NULL }
     };
 
+    static ChatCommand accountFriendCommandTable[] =
+    {
+        { "add",            PERM_ADM,       true,   &ChatHandler::HandleAccountFriendAddCommand,    "", NULL },
+        { "delete",         PERM_ADM,       true,   &ChatHandler::HandleAccountFriendDeleteCommand, "", NULL },
+        { "list",           PERM_ADM,       true,   &ChatHandler::HandleAccountFriendListCommand,   "", NULL },
+        { NULL,             0,              false,  NULL,                                           "", NULL }
+    };
+
     static ChatCommand accountCommandTable[] =
     {
         { "announce",       PERM_PLAYER,    false,  NULL,                                           "", accountAnnounceCommandTable },
         { "create",         PERM_CONSOLE,   true,   &ChatHandler::HandleAccountCreateCommand,       "", NULL },
         { "bgann",          PERM_PLAYER,    false,  &ChatHandler::HandleAccountBattleGroundAnnCommand, "", NULL },
         { "delete",         PERM_CONSOLE,   true,   &ChatHandler::HandleAccountDeleteCommand,       "", NULL },
+        { "friend",         PERM_ADM,       true,   NULL,                                           "", accountFriendCommandTable },
         { "gann",           PERM_PLAYER,    false,  &ChatHandler::HandleAccountGuildAnnToggleCommand, "", NULL },
         { "bones",          PERM_PLAYER,    false,  &ChatHandler::HandleAccountBonesHideCommand,    "", NULL },
         { "log",            PERM_ADM,       true,   &ChatHandler::HandleAccountSpecialLogCommand,   "", NULL },
@@ -517,6 +526,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "delitem",        PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcDelItemCommand,          "", NULL },
         { "doaction",       PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcDoActionCommand,         "", NULL },
         { "enterevademode", PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcEnterEvadeModeCommand,   "", NULL },
+        { "extraflag",      PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcExtraFlagCommand,        "", NULL },
         { "factionid",      PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcFactionIdCommand,        "", NULL },
         { "fieldflag",      PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcFieldFlagCommand,        "", NULL },
         { "flag",           PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcFlagCommand,             "", NULL },
@@ -531,6 +541,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "setmovetype",    PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcSetMoveTypeCommand,      "", NULL },
         { "spawndist",      PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcSpawnDistCommand,        "", NULL },
         { "spawntime",      PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcSpawnTimeCommand,        "", NULL },
+        { "standstate",     PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcStandState,              "", NULL },
         { "textemote",      PERM_GMT,       false,  &ChatHandler::HandleNpcTextEmoteCommand,        "", NULL },
         { "unfollow",       PERM_GMT_DEV,   false,  &ChatHandler::HandleNpcUnFollowCommand,         "", NULL },
         { "whisper",        PERM_GMT,       false,  &ChatHandler::HandleNpcWhisperCommand,          "", NULL },
@@ -548,6 +559,7 @@ ChatCommand * ChatHandler::getCommandTable()
     static ChatCommand goCommandTable[] =
     {
         { "creature",       PERM_GMT_DEV,   false,  &ChatHandler::HandleGoCreatureCommand,          "", NULL },
+        { "direct",         PERM_GMT_DEV,   false,  &ChatHandler::HandleGoCreatureDirectCommand,    "", NULL },
         { "graveyard",      PERM_GMT_DEV,   false,  &ChatHandler::HandleGoGraveyardCommand,         "", NULL },
         { "grid",           PERM_GMT_DEV,   false,  &ChatHandler::HandleGoGridCommand,              "", NULL },
         { "object",         PERM_GMT_DEV,   false,  &ChatHandler::HandleGoObjectCommand,            "", NULL },
@@ -703,6 +715,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "info",           PERM_GMT,       false,  &ChatHandler::HandleInfoCommand,                "", NULL },
         { "groupgo",        PERM_GMT,       false,  &ChatHandler::HandleGroupgoCommand,             "", NULL },
         { "guid",           PERM_GMT_DEV,   false,  &ChatHandler::HandleGUIDCommand,                "", NULL },
+        { "hdevannounce",   PERM_HEAD_DEVELOPER,false,&ChatHandler::HandleHDevAnnounceCommand,      "", NULL },
         { "help",           PERM_PLAYER,    true,   &ChatHandler::HandleHelpCommand,                "", NULL },
         { "hidearea",       PERM_ADM,       false,  &ChatHandler::HandleHideAreaCommand,            "", NULL },
         { "hover",          PERM_ADM,       false,  &ChatHandler::HandleHoverCommand,               "", NULL },
@@ -737,6 +750,8 @@ ChatCommand * ChatHandler::getCommandTable()
         { "showarea",       PERM_ADM,       false,  &ChatHandler::HandleShowAreaCommand,            "", NULL },
         { "start",          PERM_PLAYER,    false,  &ChatHandler::HandleStartCommand,               "", NULL },
         { "taxicheat",      PERM_HIGH_GMT,  false,  &ChatHandler::HandleTaxiCheatCommand,           "", NULL },
+        { "trollmute",      PERM_HIGH_GMT,  false,  &ChatHandler::HandleTrollmuteCommand,           "", NULL },
+        { "trollmuteinfo",  PERM_HIGH_GMT,  false,  &ChatHandler::HandleTrollmuteInfoCommand,       "", NULL },
         { "unaura",         PERM_ADM,       false,  &ChatHandler::HandleUnAuraCommand,              "", NULL },
         { "unbindfollow",   PERM_ADM,       false,  &ChatHandler::HandleUnbindFollowCommand,        "", NULL },
         { "unbindsight",    PERM_ADM,       false,  &ChatHandler::HandleUnbindSightCommand,         "", NULL },
@@ -935,7 +950,7 @@ bool ChatHandler::ExecuteCommandInTable(ChatCommand *table, const char* text, co
     {
         if (!hasStringAbbr(table[i].Name, cmd.c_str()))
             continue;
-
+        
         // select subcommand from child commands list
         if (table[i].ChildCommands != NULL)
         {
@@ -960,18 +975,22 @@ bool ChatHandler::ExecuteCommandInTable(ChatCommand *table, const char* text, co
         // table[i].Name == "" is special case: send original command to handler
         if ((this->*(table[i].Handler))(strlen(table[i].Name)!=0 ? text : oldtext))
         {
-            if (table[i].RequiredPermissions & sWorld.getConfig(CONFIG_MIN_GM_COMMAND_LOG_LEVEL))
+            if (m_session && (m_session->GetPermissions() & sWorld.getConfig(CONFIG_COMMAND_LOG_PERMISSION)) && table[i].Name != "password")
             {
-                // chat case
-                if (m_session)
-                {
-                    Player* p = m_session->GetPlayer();
-                    uint64 sel_guid = p->GetSelection();
-                    if (table[i].Name != "password")
-                        sLog.outCommand(m_session->GetAccountId(),"Command: %s [Player: %s (Account: %u) X: %f Y: %f Z: %f Map: %u Selected: (GUID: %u)]",
-                            fullcmd.c_str(),p->GetName(),m_session->GetAccountId(),p->GetPositionX(),p->GetPositionY(),p->GetPositionZ(),p->GetMapId(),
-                            GUID_LOPART(sel_guid));
-                }
+                Player* p = m_session->GetPlayer();
+                uint64 sel_guid = p->GetSelection();
+                Unit* unit = p->GetUnit(sel_guid);
+                char sel_string[100];
+                if(sel_guid && unit)
+                    sprintf(sel_string,"%s (GUID:%u)",unit->GetName(), GUID_LOPART(sel_guid));
+                else if (sel_guid)
+                    sprintf(sel_string,"(GUID:%u)", GUID_LOPART(sel_guid));
+                else
+                    sprintf(sel_string,"NONE");
+
+                sLog.outCommand(m_session->GetAccountId(),"Command: %s [Player: %s (Account: %u) X: %f Y: %f Z: %f Map: %u Selected: %s]",
+                    fullcmd.c_str(),p->GetName(),m_session->GetAccountId(),p->GetPositionX(),p->GetPositionY(),p->GetPositionZ(),p->GetMapId(),
+                    sel_string);
             }
         }
         // some commands have custom error messages. Don't send the default one in these cases.
@@ -1005,7 +1024,6 @@ int ChatHandler::ParseCommands(const char* text)
     ASSERT(*text);
 
     std::string fullcmd = text;
-
     /// chat case (.command format)
     if (m_session)
     {
@@ -1533,7 +1551,7 @@ bool ChatHandler::GetPlayerGroupAndGUIDByName(const char* cname, Player* &plr, G
     return true;
 }
 
-std::string ChatHandler::GetNameLink(std::string & name)
+std::string ChatHandler::GetNameLink(const std::string & name)
 {
     return "|Hplayer:" + name + "|h[" + name + "]|h";
 }

@@ -215,7 +215,7 @@ pEffect SpellEffects[TOTAL_SPELL_EFFECTS]=
     &Spell::EffectCharge2,                                  //149 SPELL_EFFECT_CHARGE2                  swoop
     &Spell::EffectUnused,                                   //150 SPELL_EFFECT_150                      unused
     &Spell::EffectTriggerRitualOfSummoning,                 //151 SPELL_EFFECT_TRIGGER_SPELL_2
-    &Spell::EffectNULL,                                     //152 SPELL_EFFECT_152                      summon Refer-a-Friend
+    &Spell::EffectFriendSummon,                             //152 SPELL_EFFECT_FRIEND_SUMMON                     summon Refer-a-Friend
     &Spell::EffectNULL,                                     //153 SPELL_EFFECT_CREATE_PET               misc value is creature entry
 };
 
@@ -5282,26 +5282,40 @@ void Spell::EffectHealMaxHealth(uint32 /*i*/)
 
 void Spell::EffectInterruptCast(uint32 i)
 {
-    if (!unitTarget)
-        return;
-    if (!unitTarget->isAlive())
+    if (!unitTarget || !unitTarget->isAlive())
         return;
 
     // TODO: not all spells that used this effect apply cooldown at school spells
     // also exist case: apply cooldown to interrupted cast only and to all spells
     for (uint32 k = CURRENT_FIRST_NON_MELEE_SPELL; k < CURRENT_MAX_SPELL; k++)
     {
-        if (unitTarget->m_currentSpells[k])
+        if (Spell* spell = unitTarget->m_currentSpells[k])
         {
+            const SpellEntry* curSpellInfo = spell->GetSpellInfo();
             // check if we can interrupt spell
-            if ((unitTarget->m_currentSpells[k]->getState() == SPELL_STATE_CASTING || (unitTarget->m_currentSpells[k]->getState() == SPELL_STATE_PREPARING && unitTarget->m_currentSpells[k]->GetCastTime() > 0.0f)) && unitTarget->m_currentSpells[k]->GetSpellInfo()->InterruptFlags & SPELL_INTERRUPT_FLAG_INTERRUPT && unitTarget->m_currentSpells[k]->GetSpellInfo()->PreventionType == SPELL_PREVENTION_TYPE_SILENCE)
+            if ((spell->getState() == SPELL_STATE_CASTING || (spell->getState() == SPELL_STATE_PREPARING && spell->GetCastTime() > 0.0f)) &&
+                curSpellInfo->PreventionType == SPELL_PREVENTION_TYPE_SILENCE &&
+                ((k == CURRENT_GENERIC_SPELL && curSpellInfo->InterruptFlags & SPELL_INTERRUPT_FLAG_INTERRUPT) ||
+                (k == CURRENT_CHANNELED_SPELL && curSpellInfo->ChannelInterruptFlags & CHANNEL_INTERRUPT_FLAG_MOVEMENT)))
             {
                 if (m_originalCaster)
                 {
                     int32 duration = m_originalCaster->CalculateSpellDuration(GetSpellInfo(), i, unitTarget);
-                    unitTarget->ProhibitSpellScholl(SpellMgr::GetSpellSchoolMask(unitTarget->m_currentSpells[k]->GetSpellInfo()), duration/*GetSpellDuration(GetSpellInfo())*/);
+                    unitTarget->ProhibitSpellSchool(SpellMgr::GetSpellSchoolMask(curSpellInfo), duration /* GetSpellDuration(GetSpellInfo())? */);
                 }
-                unitTarget->InterruptSpell(k,false);
+
+                // has to be sent before InterruptSpell call
+                WorldPacket data(SMSG_SPELLLOGEXECUTE, (8+4+4+4+4+8+4));
+                data << m_caster->GetPackGUID();
+                data << uint32(GetSpellInfo()->Id);
+                data << uint32(1); // effect count
+                data << uint32(SPELL_EFFECT_INTERRUPT_CAST);
+                data << uint32(1); // target count
+                data << unitTarget->GetPackGUID();
+                data << uint32(curSpellInfo->Id);
+                m_caster->BroadcastPacket(&data, true);
+
+                unitTarget->InterruptSpell(k, false);
             }
         }
     }
@@ -8047,4 +8061,30 @@ void Spell::EffectPlayMusic(uint32 i)
     WorldPacket data(SMSG_PLAY_MUSIC, 4);
     data << uint32(soundid);
     ((Player*)unitTarget)->SendPacketToSelf(&data);
+}
+
+void Spell::EffectFriendSummon(uint32 eff_idx)
+{
+    if (m_caster->GetTypeId() != TYPEID_PLAYER)
+        return;
+
+    uint64 selection = ((Player*) m_caster)->GetSelection();
+    if (selection == NULL || !IS_PLAYER_GUID(selection))
+    {
+        DEBUG_LOG("Spell::EffectFriendSummon is called, but no selection or selection is not player");
+        return;
+    }
+
+    Player* target = ObjectAccessor::GetPlayer(selection);
+    if (target == nullptr)
+        return;
+
+    WorldLocation location;
+    location.mapid = m_caster->GetMapId();
+    location.coord_x = m_caster->GetPositionX();
+    location.coord_y = m_caster->GetPositionY();
+    location.coord_z = m_caster->GetPositionZ();
+    location.orientation = m_caster->GetOrientation();
+
+    target->TeleportTo(location);
 }

@@ -621,7 +621,7 @@ int WorldSocket::ProcessIncoming(WorldPacket* new_pct)
 
                 if (m_Session != NULL)
                 {
-                    if((_os == "CHA") && !IsChatOpcode(opcode))
+                    if((operatingSystem == CLIENT_OS_CHAT) && !IsChatOpcode(opcode))
                     {
                         sLog.outLog(LOG_WARDEN, "Chat Client for account %u send illegal opcode %u",m_Session->GetAccountId(),opcode);
                         if (sWorld.getConfig(CONFIG_WARDEN_KICK))
@@ -760,7 +760,7 @@ int WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
     Field* fields = result->Fetch();
 
     std::string lastLocalIp = fields[12].GetString();
-    uint8 operatingSystem = fields[11].GetUInt8();
+    operatingSystem = fields[11].GetUInt8();
     expansion =((sWorld.getConfig(CONFIG_EXPANSION) > fields[7].GetUInt8()) ? fields[7].GetUInt8() : sWorld.getConfig(CONFIG_EXPANSION));
 
     N.SetHexStr("894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7");
@@ -813,7 +813,8 @@ int WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
                                 "FROM account_punishment "
                                 "WHERE account_id = '%u' "
                                 "AND punishment_type_id = '%u' "
-                                "AND expiration_date > UNIX_TIMESTAMP()",
+                                "AND active = 1 "
+                                "AND (expiration_date > UNIX_TIMESTAMP() OR expiration_date = punishment_date)",
                                 id, PUNISHMENT_BAN);
 
     if (banresult) // if account banned
@@ -879,7 +880,6 @@ int WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
     // Update the last_ip in the database
     // No SQL injection, username escaped.
     static SqlStatementID updAccount;
-
     SqlStatement stmt = AccountsDatabase.CreateStatement(updAccount, "UPDATE account SET last_ip = ? WHERE account_id = ?");
     stmt.PExecute(address.c_str(), id);
 
@@ -889,9 +889,11 @@ int WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
                                 "reason "
                                 "FROM account_punishment "
                                 "WHERE account_id = '%u' "
-                                "AND expiration_date > UNIX_TIMESTAMP() "
+                                "AND active = 1 "
+                                "AND punishment_type_id = '%u' "
+                                "AND (expiration_date > UNIX_TIMESTAMP() OR expiration_date = punishment_date) "
                                 "ORDER BY expiration_date DESC LIMIT 1",
-                                id);
+                                id,PUNISHMENT_MUTE);
 
     time_t mutetime;
     std::string mutereason;
@@ -908,15 +910,41 @@ int WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
         mutereason = "";
     }
 
+    muteresult = AccountsDatabase.PQuery("SELECT "
+                                "expiration_date, "
+                                "reason "
+                                "FROM account_punishment "
+                                "WHERE account_id = '%u' "
+                                "AND active = 1 "
+                                "AND punishment_type_id = '%u' "
+                                "AND (expiration_date > UNIX_TIMESTAMP() OR expiration_date = punishment_date) "
+                                "ORDER BY expiration_date DESC LIMIT 1",
+                                id,PUNISHMENT_TROLLMUTE);
+
+    time_t trollmutetime;
+    std::string trollmutereason;
+
+    if (muteresult)
+    {
+        Field* mutefields = muteresult->Fetch();
+        trollmutetime = time_t(mutefields[0].GetUInt64());
+        trollmutereason = mutefields[1].GetString();
+    }
+    else
+    {
+        trollmutetime = 0;
+        trollmutereason = "";
+    }
+
     // NOTE ATM the socket is singlethreaded, have this in mind ...
-    ACE_NEW_RETURN(m_Session, WorldSession(id, this, permissionMask, expansion, locale, mutetime, mutereason, accFlags, opcDis), -1);
+    ACE_NEW_RETURN(m_Session, WorldSession(id, this, permissionMask, expansion, locale, mutetime, mutereason, trollmutetime, trollmutereason, accFlags, opcDis), -1);
 
     m_Crypt.SetKey(&K);
     m_Crypt.Init();
 
     AccountsDatabase.escape_string(lastLocalIp);
 
-    AccountsDatabase.PExecute("INSERT INTO account_login VALUES ('%u', UNIX_TIMESTAMP(), '%s', '%s')", id, address.c_str(), lastLocalIp.c_str());
+    AccountsDatabase.PExecute("INSERT INTO account_login VALUES ('%u', NOW(), '%s', '%s')", id, address.c_str(), lastLocalIp.c_str());
 
     // Initialize Warden system only if it is enabled by config
     if (sWorld.getConfig(CONFIG_WARDEN_ENABLED))

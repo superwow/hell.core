@@ -233,7 +233,7 @@ void WorldSession::HandleWhoOpcode(WorldPacket & recv_data)
     HashMapHolder<Player>::MapType& m = sObjectAccessor.GetPlayers();
     for (HashMapHolder<Player>::MapType::iterator itr = m.begin(); itr != m.end(); ++itr)
     {
-        if (!HasPermissions(PERM_GMT))
+        if (!HasPermissions(PERM_GMT_HDEV))
         {
             // player can see member of other team only if CONFIG_ALLOW_TWO_SIDE_WHO_LIST
             if (itr->second->GetTeam() != team && !allowTwoSideWhoList)
@@ -590,12 +590,12 @@ void WorldSession::HandleAddFriendOpcodeCallBack(QueryResultAutoPtr result, uint
         team = Player::TeamForRace((*result)[1].GetUInt8());
         friendAcctid = (*result)[2].GetUInt32();
 
-        if (session->HasPermissions(PERM_GMT) || sWorld.getConfig(CONFIG_ALLOW_GM_FRIEND) || !AccountMgr::HasPermissions(friendAcctid, PERM_GMT))
+        if (session->HasPermissions(PERM_GMT_HDEV) || sWorld.getConfig(CONFIG_ALLOW_GM_FRIEND) || !AccountMgr::HasPermissions(friendAcctid, PERM_GMT))
             if (friendGuid)
             {
                 if (friendGuid==session->GetPlayer()->GetGUID())
                     friendResult = FRIEND_SELF;
-                else if (session->GetPlayer()->GetTeam() != team && !sWorld.getConfig(CONFIG_ALLOW_TWO_SIDE_ADD_FRIEND) && !session->HasPermissions(PERM_GMT))
+                else if (session->GetPlayer()->GetTeam() != team && !sWorld.getConfig(CONFIG_ALLOW_TWO_SIDE_ADD_FRIEND) && !session->HasPermissions(PERM_GMT_HDEV))
                     friendResult = FRIEND_ENEMY;
                 else if (session->GetPlayer()->GetSocial()->HasFriend(GUID_LOPART(friendGuid)))
                     friendResult = FRIEND_ALREADY;
@@ -679,7 +679,7 @@ void WorldSession::HandleAddIgnoreOpcodeCallBack(QueryResultAutoPtr result, uint
         if (IgnoreGuid)
         {
             Player * tmp = ObjectAccessor::GetPlayer(IgnoreGuid);
-            if (!tmp || !session->HasPermissions(PERM_GMT))                    // add only players
+            if (!tmp || !tmp->GetSession()->HasPermissions(PERM_GMT_HDEV))  // add only players
             {
                 if (IgnoreGuid==session->GetPlayer()->GetGUID())            // not add yourself
                     ignoreResult = FRIEND_IGNORE_SELF;
@@ -1670,3 +1670,58 @@ void WorldSession::HandleSetTaxiBenchmarkOpcode(WorldPacket & recv_data)
     sLog.outDebug("Client used \"/timetest %d\" command", mode);
 }
 
+// Refer-A-Friend
+void WorldSession::HandleGrantLevel(WorldPacket& recv_data)
+{
+    DEBUG_LOG("WORLD: CMSG_GRANT_LEVEL");
+
+    ObjectGuid guid;
+    recv_data >> guid.ReadAsPacked();
+
+    if (!guid.IsPlayer())
+        return;
+
+    Player * target = sObjectMgr.GetPlayer(guid);
+
+    // cheating and other check
+    ReferAFriendError err = _player->GetReferFriendError(target, false);
+
+    if (err)
+    {
+        _player->SendReferFriendError(err, target);
+        return;
+    }
+
+    target->AccessGrantableLevel(_player->GetObjectGuid());
+
+    WorldPacket data(SMSG_PROPOSE_LEVEL_GRANT, 8);
+    data << _player->GetPackGUID();
+    target->GetSession()->SendPacket(&data);
+}
+
+void WorldSession::HandleAcceptGrantLevel(WorldPacket& recv_data)
+{
+    DEBUG_LOG("WORLD: CMSG_ACCEPT_LEVEL_GRANT");
+
+    ObjectGuid guid;
+    recv_data >> guid.ReadAsPacked();
+
+    if (!guid.IsPlayer())
+        return;
+
+    if (!_player->IsAccessGrantableLevel(guid))
+        return;
+
+    _player->AccessGrantableLevel(ObjectGuid());
+    Player * grant_giver = sObjectMgr.GetPlayer(guid);
+
+    if (!grant_giver)
+        return;
+
+    if (grant_giver->GetGrantableLevels())
+        grant_giver->ChangeGrantableLevels(0);
+    else
+        return;
+
+    _player->GiveLevel(_player->getLevel() + 1);
+}

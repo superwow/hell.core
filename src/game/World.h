@@ -90,6 +90,7 @@ enum WorldTimers
     WUPDATE_GUILD_ANNOUNCES = 8,
     WUPDATE_DELETECHARS     = 9,
     WUPDATE_OLDMAILS        = 10,
+    WUPDATE_ACTIVE_BANS     = 11,
 
     WUPDATE_COUNT
 };
@@ -223,6 +224,8 @@ enum WorldConfigs
     CONFIG_ENABLE_ARENA_STEP_BY_STEP_MATCHING,
     CONFIG_ARENA_STEP_BY_STEP_TIME,
     CONFIG_ARENA_STEP_BY_STEP_VALUE,
+    CONFIG_ARENA_END_AFTER_TIME,
+    CONFIG_ARENA_END_AFTER_ALWAYS_DRAW,
 
     CONFIG_BATTLEGROUND_INVITATION_TYPE,
     CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH,
@@ -230,6 +233,9 @@ enum WorldConfigs
     CONFIG_BATTLEGROUND_ANNOUNCE_START,
     CONFIG_BATTLEGROUND_QUEUE_INFO,
     CONFIG_BATTLEGROUND_TIMER_INFO,
+    CONFIG_BATTLEGROUND_WSG_END_AFTER_ENABLED,
+    CONFIG_BATTLEGROUND_WSG_END_AFTER_TIME,
+    CONFIG_BATTLEGROUND_WSG_END_AFTER_ALWAYS_DRAW,
 
     CONFIG_MAX_WHO,
     CONFIG_BG_START_MUSIC,
@@ -264,6 +270,8 @@ enum WorldConfigs
     CONFIG_WARDEN_ENABLED,
     CONFIG_WARDEN_KICK,
     CONFIG_WARDEN_BAN,
+    CONFIG_WARDEN_LOG_ONLY_CHECK,
+    CONFIG_ACTIVE_BANS_UPDATE_TIME,
 
     CONFIG_DONT_DELETE_CHARS,
     CONFIG_DONT_DELETE_CHARS_LVL,
@@ -291,6 +299,8 @@ enum WorldConfigs
     CONFIG_VMSS_ENABLE,
 
     CONFIG_ENABLE_CUSTOM_XP_RATES,
+    CONFIG_XP_RATE_MODIFY_ITEM_ENTRY,
+    CONFIG_XP_RATE_MODIFY_ITEM_PCT,
 
     CONFIG_ENABLE_PASSIVE_ANTICHEAT,
 
@@ -301,7 +311,7 @@ enum WorldConfigs
 
     CONFIG_KICK_PLAYER_ON_BAD_PACKET,
 
-    CONFIG_MIN_GM_COMMAND_LOG_LEVEL,
+    CONFIG_COMMAND_LOG_PERMISSION,
 
     CONFIG_WAYPOINT_MOVEMENT_ACTIVE_ON_CONTINENTS,
     CONFIG_WAYPOINT_MOVEMENT_ACTIVE_IN_INSTANCES,
@@ -316,6 +326,7 @@ enum WorldConfigs
     CONFIG_TARGET_POS_RECHECK_TIMER,
 
     CONFIG_PRIVATE_CHANNEL_LIMIT,
+    CONFIG_GLOBAL_TRADE_CHANNEL,
 
     CONFIG_VMAP_LOS_ENABLED,
     CONFIG_MMAP_ENABLED,
@@ -330,6 +341,10 @@ enum WorldConfigs
 
     CONFIG_CREATURE_RESTORE_STATE,
     CONFIG_FFA_DISALLOWGROUP,
+
+    CONFIG_UINT32_RAF_MAXGRANTLEVEL,
+    CONFIG_UINT32_RAF_MAXREFERALS,
+    CONFIG_UINT32_RAF_MAXREFERERS,
 
     CONFIG_VALUE_COUNT
 };
@@ -394,6 +409,10 @@ enum Rates
     RATE_DURABILITY_LOSS_PARRY,
     RATE_DURABILITY_LOSS_ABSORB,
     RATE_DURABILITY_LOSS_BLOCK,
+
+    CONFIG_FLOAT_RATE_RAF_XP,
+    CONFIG_FLOAT_RATE_RAF_LEVELPERLEVEL,
+
     MAX_RATES
 };
 
@@ -721,19 +740,29 @@ class HELLGROUND_EXPORT World
         float getRate(Rates rate) const { return rate_values[rate]; }
 
         /// Set a server configuration element (see #WorldConfigs)
-        void setConfig(uint32 index,uint32 value)
+        void setConfig(WorldConfigs index, uint32 value)
         {
             if (index<CONFIG_VALUE_COUNT)
                 m_configs[index]=value;
         }
 
+        void setConfig(Rates index, float value)
+        {
+            setRate(index, value);
+        }
+
         /// Get a server configuration element (see #WorldConfigs)
-        uint32 getConfig(uint32 index) const
+        uint32 getConfig(WorldConfigs index) const
         {
             if (index<CONFIG_VALUE_COUNT)
                 return m_configs[index];
             else
                 return 0;
+        }
+
+        float getConfig(Rates index) const
+        {
+            return getRate(index);
         }
 
         /// Are we on a "Player versus Player" server?

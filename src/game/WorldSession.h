@@ -153,7 +153,7 @@ class HELLGROUND_IMPORT_EXPORT WorldSession
 {
     friend class CharacterHandler;
     public:
-        WorldSession(uint32 id, WorldSocket *sock, uint64 permissions, uint8 expansion, LocaleConstant locale, time_t mute_time = 0, std::string mute_reason = "", uint64 accFlags = 0, uint16 opcDisabled = 0);
+        WorldSession(uint32 id, WorldSocket *sock, uint64 permissions, uint8 expansion, LocaleConstant locale, time_t mute_time = 0, std::string mute_reason = "", time_t trollmute_time = 0, std::string trollmute_reason = "", uint64 accFlags = 0, uint16 opcDisabled = 0);
         ~WorldSession();
 
         bool PlayerLoading() const { return m_playerLoading; }
@@ -310,6 +310,8 @@ class HELLGROUND_IMPORT_EXPORT WorldSession
         // Account mute time
         time_t m_muteTime;
         std::string m_muteReason;
+        time_t m_trollmuteTime;
+        std::string m_trollmuteReason;
 
         // Locales
         LocaleConstant GetSessionDbcLocale() const { return m_sessionDbcLocale; }
@@ -746,7 +748,10 @@ class HELLGROUND_IMPORT_EXPORT WorldSession
         // Other
         void HandleGetMirrorimageData(WorldPacket& recv_data);
 
-    private:
+        void HandleGrantLevel(WorldPacket& recv_data);
+        void HandleAcceptGrantLevel(WorldPacket& recv_data);
+        
+        private:
         // private trade methods
         void moveItems(Item* myItems[], Item* hisItems[]);
 

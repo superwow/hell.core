@@ -16,6 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
  */
 
 #include "Common.h"
@@ -65,7 +66,7 @@
 #include "GameEvent.h"
 #include "GridMap.h"
 #include "WorldEventProcessor.h"
-
+#include "AccountMgr.h"
 #include "PlayerAI.h"
 
 #include <cmath>
@@ -289,7 +290,7 @@ Player::Player (WorldSession *session): Unit(), m_reputationMgr(this), m_camera(
     m_ExtraFlags = 0;
 
     // players always accept
-    if (!GetSession()->HasPermissions(PERM_GMT))
+    if (!GetSession()->HasPermissions(PERM_GMT_HDEV))
         SetAcceptWhispers(true);
 
     m_curSelection = 0;
@@ -431,6 +432,8 @@ Player::Player (WorldSession *session): Unit(), m_reputationMgr(this), m_camera(
         m_auraBaseMod[i][PCT_MOD] = 1.0f;
     }
 
+    m_spellPenetrationItemMod = 0;
+
     // Honor System
     m_lastHonorUpdateTime = time(NULL);
 
@@ -455,6 +458,8 @@ Player::Player (WorldSession *session): Unit(), m_reputationMgr(this), m_camera(
     _preventUpdate = false;
 
     positionStatus.Reset(0);
+
+    m_GrantableLevelsCount = 0;
 }
 
 Player::~Player ()
@@ -498,6 +503,7 @@ Player::~Player ()
     delete m_declinedname;
 
     DeleteCharmAI();
+    sSocialMgr.canWhisperToGMList.remove(GetGUID());
 }
 
 void Player::CleanupsBeforeDelete()
@@ -609,6 +615,14 @@ bool Player::Create(uint32 guidlow, const std::string& name, uint8 race, uint8 c
     SetUInt32Value(PLAYER_FIELD_WATCHED_FACTION_INDEX, uint32(-1));
 
     SetUInt32Value(PLAYER_BYTES, (skin | (face << 8) | (hairStyle << 16) | (hairColor << 24)));
+
+    LoadAccountLinkedState();
+
+    if (GetAccountLinkedState() != STATE_NOT_LINKED)
+        SetByteValue(PLAYER_BYTES_2, 3, REST_STATE_RAF);    // rest state = refer-a-friend
+    else
+        SetByteValue(PLAYER_BYTES_2, 3, REST_STATE_NORMAL); // rest state = normal
+
     SetUInt32Value(PLAYER_BYTES_2, (facialHair | (0x00 << 8) | (0x00 << 16) | (0x02 << 24)));
     SetByteValue(PLAYER_BYTES_3, 0, gender);
 
@@ -624,7 +638,7 @@ bool Player::Create(uint32 guidlow, const std::string& name, uint8 race, uint8 c
     SetUInt32Value(PLAYER_FIELD_YESTERDAY_CONTRIBUTION, 0);
 
     // set starting level
-    if (GetSession()->HasPermissions(PERM_GMT))
+    if (GetSession()->HasPermissions(PERM_GMT_HDEV))
         SetUInt32Value (UNIT_FIELD_LEVEL, sWorld.getConfig(CONFIG_START_GM_LEVEL));
     else
         SetUInt32Value (UNIT_FIELD_LEVEL, sWorld.getConfig(CONFIG_START_PLAYER_LEVEL));
@@ -2383,18 +2397,18 @@ void Player::RemoveFromGroup(Group* group, uint64 guid)
     }
 }
 
-void Player::SendLogXPGain(uint32 GivenXP, Unit* victim, uint32 RestXP)
+void Player::SendLogXPGain(uint32 GivenXP, Unit* victim, uint32 BonusXP, bool ReferAFriend)
 {
     WorldPacket data(SMSG_LOG_XPGAIN, 21);
     data << uint64(victim ? victim->GetGUID() : 0);         // guid
-    data << uint32(GivenXP+RestXP);                         // given experience
+    data << uint32(GivenXP + BonusXP);                         // given experience
     data << uint8(victim ? 0 : 1);                          // 00-kill_xp type, 01-non_kill_xp type
     if (victim)
     {
         data << uint32(GivenXP);                            // experience without rested bonus
         data << float(1);                                   // 1 - none 0 - 100% group bonus output
     }
-    data << uint8(0);                                       // new 2.4.0
+    data << (ReferAFriend ? 1 : 0);                         // Refer-A-Friend State
     SendPacketToSelf(&data);
 }
 
@@ -2417,21 +2431,62 @@ void Player::GiveXP(uint32 xp, Unit* victim)
     for (Unit::AuraList::const_iterator i = ModXPPctAuras.begin();i != ModXPPctAuras.end(); ++i)
         xp = uint32(xp*(1.0f + (*i)->GetModifierValue() / 100.0f));
 
+    if (uint32 goodEntry = sWorld.getConfig(CONFIG_XP_RATE_MODIFY_ITEM_ENTRY))
+    {
+        for (int i = EQUIPMENT_SLOT_START; i < EQUIPMENT_SLOT_END; i++)
+        {
+            Item *pItem = GetItemByPos(INVENTORY_SLOT_BAG_0, i);
+            if (pItem && pItem->GetEntry() == goodEntry)
+            {
+                xp = uint32(xp*(1.0f + sWorld.getConfig(CONFIG_XP_RATE_MODIFY_ITEM_PCT) / 100.0f));
+                break;
+            }
+        }
+    }
+    
     // XP resting bonus for kill
-    uint32 rested_bonus_xp = victim ? GetXPRestBonus(xp) : 0;
+    uint32 bonus_xp = 0;
+    bool ReferAFriend = false;
+    if (CheckRAFConditions())
+    {
+        // RAF bonus exp don't decrease rest exp
+        bool ReferAFriend = true;
+        bonus_xp = xp * (sWorld.getConfig(CONFIG_FLOAT_RATE_RAF_XP) - 1);
+    }
+    else
+        // XP resting bonus for kill
+        bonus_xp = victim ? GetXPRestBonus(xp) : 0;
 
-    SendLogXPGain(xp,victim,rested_bonus_xp);
+    SendLogXPGain(xp, victim, bonus_xp, ReferAFriend);
 
     uint32 curXP = GetUInt32Value(PLAYER_XP);
     uint32 nextLvlXP = GetUInt32Value(PLAYER_NEXT_LEVEL_XP);
-    uint32 newXP = curXP + xp + rested_bonus_xp;
+    uint32 newXP = curXP + xp + bonus_xp;
 
     while (newXP >= nextLvlXP && level < sWorld.getConfig(CONFIG_MAX_PLAYER_LEVEL))
     {
         newXP -= nextLvlXP;
 
         if (level < sWorld.getConfig(CONFIG_MAX_PLAYER_LEVEL))
+        {
+            // set health/po{
             GiveLevel(level + 1);
+            level = getLevel();
+            // Refer-A-Friend
+            if (GetAccountLinkedState() == STATE_REFERRAL || GetAccountLinkedState() == STATE_DUAL)
+            {
+                if (level < sWorld.getConfig(CONFIG_UINT32_RAF_MAXGRANTLEVEL))
+                {
+                    if (sWorld.getConfig(CONFIG_FLOAT_RATE_RAF_LEVELPERLEVEL) < 1.0f)
+                    {
+                        if (level%uint8(1.0f / sWorld.getConfig(CONFIG_FLOAT_RATE_RAF_LEVELPERLEVEL)) == 0)
+                            ChangeGrantableLevels(1);
+                    }
+                    else
+                        ChangeGrantableLevels(uint8(sWorld.getConfig(CONFIG_FLOAT_RATE_RAF_LEVELPERLEVEL)));
+                }
+            }
+        }
 
         level = getLevel();
         nextLvlXP = GetUInt32Value(PLAYER_NEXT_LEVEL_XP);
@@ -3197,6 +3252,14 @@ void Player::removeSpell(uint32 spell_id, bool disabled)
     SpellsRequiringSpellMap::const_iterator itr2 = reqMap.find(spell_id);
     for (uint32 i=reqMap.count(spell_id);i>0;i--,itr2++)
         removeSpell(itr2->second,disabled);
+
+    if (CanDualWield())
+    {
+        SpellEntry const *spellInfo = sSpellStore.LookupEntry(spell_id);
+
+        if (spellInfo && spellInfo->HasEffect(SPELL_EFFECT_DUAL_WIELD))
+            SetCanDualWield(false);
+    }
 
     // removing
     WorldPacket data(SMSG_REMOVED_SPELL, 4);
@@ -4145,6 +4208,10 @@ void Player::ResurrectPlayer(float restore_percent, bool applySickness)
 
     m_deathTimer = 0;
 
+    // refer-a-friend flag - maybe wrong and hacky
+    if (GetAccountLinkedState() != STATE_NOT_LINKED)
+        SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_REFER_A_FRIEND);
+
     // set health/powers (0- will be set in caller)
     if (restore_percent>0.0f)
     {
@@ -4634,7 +4701,10 @@ void Player::UpdateLocalChannels(uint32 newZone)
         if (!ch)
             continue;
 
-        if ((ch->flags & 4) == 4)                            // global channel without zone name in pattern
+        if (ch->flags & CHANNEL_DBC_FLAG_GLOBAL)//Global channels
+            continue;
+        
+        if ((ch->flags & CHANNEL_DBC_FLAG_TRADE) && sWorld.getConfig(CONFIG_GLOBAL_TRADE_CHANNEL))//trade channel
             continue;
 
         //  new channel
@@ -5883,6 +5953,9 @@ int32 Player::CalculateReputationGain(ReputationSource source, int32 rep, int32 
         percent *= repRate;
     }
 
+    if (CheckRAFConditions())
+        percent *= sWorld.getConfig(CONFIG_FLOAT_RATE_RAF_XP);
+
     return int32(0.01f + sWorld.getRate(RATE_REPUTATION_GAIN)*rep*percent/100.0f);
 }
 
@@ -6804,6 +6877,10 @@ void Player::_ApplyItemBonuses(ItemPrototype const *proto,uint8 slot,bool apply)
                 break;
             case ITEM_MOD_EXPERTISE_RATING:
                 ApplyRatingMod(CR_EXPERTISE, int32(val), apply);
+                break;
+            case ITEM_MOD_SPELL_PENETRATION:
+                ApplyModInt32Value(PLAYER_FIELD_MOD_TARGET_RESISTANCE, int32(-val), apply);
+                m_spellPenetrationItemMod += apply ? int32(val) : int32(-val);
                 break;
         }
     }
@@ -14478,6 +14555,11 @@ bool Player::LoadFromDB(uint32 guid, SqlQueryHolder *holder)
                 SetMapId(GetBattleGroundEntryPointMap());
                 Relocate(GetBattleGroundEntryPointX(),GetBattleGroundEntryPointY(),GetBattleGroundEntryPointZ(),GetBattleGroundEntryPointO());
                 //RemoveArenaAuras(true);
+                if (!isAlive())// resurrect on bg exit
+                {
+                    ResurrectPlayer(1.0f);
+                    SpawnCorpseBones();
+                }
             }
         }
     }
@@ -14672,6 +14754,7 @@ bool Player::LoadFromDB(uint32 guid, SqlQueryHolder *holder)
     m_taxi.LoadTaxiMask(fields[18].GetString());          // must be before InitTaxiNodesForLevel
 
     uint32 extraflags = fields[32].GetUInt32();
+    SetCanWhisperToGM(extraflags & PLAYER_EXTRA_CAN_WHISP_TO_GM);
 
     m_stableSlots = fields[33].GetUInt32();
     if (m_stableSlots > 2)
@@ -14753,11 +14836,26 @@ bool Player::LoadFromDB(uint32 guid, SqlQueryHolder *holder)
 
     _LoadAuras(holder->GetResult(PLAYER_LOGIN_QUERY_LOADAURAS), time_diff);
 
+    m_GrantableLevelsCount = fields[43].GetUInt32();
+
+    // refer-a-friend flag - maybe wrong and hacky
+    LoadAccountLinkedState();
+    if (GetAccountLinkedState() != STATE_NOT_LINKED)
+        SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_REFER_A_FRIEND);
+
+    // set grant flag
+    if (m_GrantableLevelsCount > 0)
+        SetByteValue(PLAYER_FIELD_BYTES, 1, 0x01);
+
     // add ghost flag (must be after aura load: PLAYER_FLAGS_GHOST set in aura)
     if (HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST))
         m_deathState = DEAD;
 
     _LoadSpells(holder->GetResult(PLAYER_LOGIN_QUERY_LOADSPELLS));
+    
+    //Ugly hacky one - give summon friend spell to players created before RAF implement
+    if (GetAccountLinkedState() != STATE_NOT_LINKED)
+        learnSpell(45927);
 
     // after spell load
     InitTalentForLevel();
@@ -14855,7 +14953,7 @@ bool Player::LoadFromDB(uint32 guid, SqlQueryHolder *holder)
     outDebugValues();
 
     // GM state
-    if (GetSession()->HasPermissions(PERM_GMT))
+    if (GetSession()->HasPermissions(PERM_GMT_HDEV))
     {
         switch (sWorld.getConfig(CONFIG_GM_LOGIN_STATE))
         {
@@ -14867,7 +14965,21 @@ bool Player::LoadFromDB(uint32 guid, SqlQueryHolder *holder)
                     SetGameMaster(true);
                 break;
         }
+        
+        switch (sWorld.getConfig(CONFIG_GM_WISPERING_TO))
+        {
+            default:
+            case 0:                          break;         // disable
+            case 1: SetAcceptWhispers(true); break;         // enable
+            case 2:                                         // save state
+                if (extraflags & PLAYER_EXTRA_ACCEPT_WHISPERS)
+                    SetAcceptWhispers(true);
+                break;
+        }
+    }
 
+    if (GetSession()->HasPermissions(PERM_GMT))
+    {
         switch (sWorld.getConfig(CONFIG_GM_VISIBLE_STATE))
         {
             default:
@@ -14889,17 +15001,6 @@ bool Player::LoadFromDB(uint32 guid, SqlQueryHolder *holder)
                     SetGMChat(true);
                 break;
         }
-
-        switch (sWorld.getConfig(CONFIG_GM_WISPERING_TO))
-        {
-            default:
-            case 0:                          break;         // disable
-            case 1: SetAcceptWhispers(true); break;         // enable
-            case 2:                                         // save state
-                if (extraflags & PLAYER_EXTRA_ACCEPT_WHISPERS)
-                    SetAcceptWhispers(true);
-                break;
-        }
     }
 
     _LoadDeclinedNames(holder->GetResult(PLAYER_LOGIN_QUERY_LOADDECLINEDNAMES));
@@ -14919,6 +15020,13 @@ bool Player::LoadFromDB(uint32 guid, SqlQueryHolder *holder)
     //HACK restore Arcane Cloaking aura (Naxx attu)
     if (!HasAura(28006) && (GetQuestRewardStatus(9121) || GetQuestRewardStatus(9122) || GetQuestRewardStatus(9123)))
         CastSpell(this, 28006, true);
+
+    uint8 changeRaceTo = fields[44].GetUInt8();
+    if (changeRaceTo)
+    {
+        ChangeRace(changeRaceTo);
+        RealmDataDatabase.PExecute("UPDATE characters SET changeRaceTo = '0' WHERE guid ='%u'", GetGUIDLow());
+    }
 
     return true;
 }
@@ -15981,13 +16089,13 @@ void Player::SaveToDB()
                                             "taximask, online, cinematic, "
                                             "totaltime, leveltime, rest_bonus, logout_time, is_logout_resting, resettalents_cost, resettalents_time, "
                                             "trans_x, trans_y, trans_z, trans_o, transguid, extra_flags, stable_slots, at_login, zone, "
-                                            "death_expire_time, taxi_path, arena_pending_points, latency, title) "
+                                            "death_expire_time, taxi_path, arena_pending_points, latency, title, grantableLevels) "
                                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                                                 "?, ?, ?, ?, ?, ?, ?, ?, "
                                                 "?, ?, ?, "
                                                 "?, ?, ?, ?, ?, ?, ?, "
                                                 "?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                                                "?, ?, ?, ?, ?)");
+                                                "?, ?, ?, ?, ?, ?)");
 
     stmt.addUInt32(GetGUIDLow());
     stmt.addUInt32(GetSession()->GetAccountId());
@@ -16066,6 +16174,7 @@ void Player::SaveToDB()
     stmt.addUInt32(0);
     stmt.addUInt32(GetSession()->GetLatency());
     stmt.addUInt64(GetUInt64Value(PLAYER__FIELD_KNOWN_TITLES));
+    stmt.addUInt32(m_GrantableLevelsCount);
     stmt.Execute();
 
     if (m_mailsUpdated)                                      //save mails only when needed
@@ -16710,6 +16819,11 @@ bool Player::CanSpeak() const
     return GetSession()->m_muteTime <= time (NULL);
 }
 
+bool Player::IsTrollmuted() const
+{
+    return GetSession()->m_trollmuteTime >= time (NULL);
+}
+
 /*********************************************************/
 /***              LOW LEVEL FUNCTIONS:Notifiers        ***/
 /*********************************************************/
@@ -17204,7 +17318,7 @@ void Player::Whisper(const std::string& text, uint32 language,uint64 receiver)
     if (!isAcceptWhispers() && !isGameMaster() && !rPlayer->isGameMaster())
     {
         SetAcceptWhispers(true);
-        ChatHandler(this).SendSysMessage(LANG_COMMAND_WHISPERON);
+        ChatHandler(this).PSendSysMessage(LANG_COMMAND_WHISPERACCEPTING,ChatHandler(this).GetTrinityString(LANG_ON));
     }
 
     // announce to player that player he is whispering to is afk
@@ -17591,11 +17705,15 @@ void Player::SetRestBonus (float rest_bonus_new)
     else
         m_rest_bonus = rest_bonus_new;
 
-    // update data for client
-    if (m_rest_bonus>10)
-        SetByteValue(PLAYER_BYTES_2, 3, 0x01);              // Set Reststate = Rested
-    else if (m_rest_bonus<=1)
-        SetByteValue(PLAYER_BYTES_2, 3, 0x02);              // Set Reststate = Normal
+    if (GetAccountLinkedState() != STATE_NOT_LINKED)
+        SetByteValue(PLAYER_BYTES_2, 3, REST_STATE_RAF);                              // Set Reststate = Refer-A-Friend
+    else
+    {
+        if (m_rest_bonus > 10)
+            SetByteValue(PLAYER_BYTES_2, 3, REST_STATE_RESTED);             // Set Reststate = Rested
+        else if (m_rest_bonus <= 1)
+            SetByteValue(PLAYER_BYTES_2, 3, REST_STATE_NORMAL);             // Set Reststate = Normal
+    }
 
     //RestTickUpdate
     SetUInt32Value(PLAYER_REST_STATE_EXPERIENCE, uint32(m_rest_bonus));
@@ -17802,7 +17920,7 @@ void Player::CleanupAfterTaxiFlight()
     getHostilRefManager().setOnlineOfflineState(true);
 }
 
-void Player::ProhibitSpellScholl(SpellSchoolMask idSchoolMask, uint32 unTimeMs)
+void Player::ProhibitSpellSchool(SpellSchoolMask idSchoolMask, uint32 unTimeMs)
 {
                                                             // last check 2.0.10
     WorldPacket data(SMSG_SPELL_COOLDOWN, 8+1+m_spells.size()*8);
@@ -18639,7 +18757,7 @@ bool Player::IsVisibleGloballyfor (Player* u) const
         return true;
 
     // GMs are visible for higher gms (or players are visible for gms)
-    if (u->GetSession()->HasPermissions(PERM_GMT))
+    if (u->GetSession()->HasPermissions(PERM_GMT_HDEV))
         return GetSession()->GetPermissions() <= u->GetSession()->GetPermissions();
 
     // non faction visibility non-breakable for non-GMs
@@ -20747,4 +20865,255 @@ void Player::InterruptTaxiFlying()
     // save only in non-flight case
     else
         SaveRecallPosition();
+}
+
+// Refer-A-Friend
+void Player::SendReferFriendError(ReferAFriendError err, Player * target)
+{
+    WorldPacket data(SMSG_REFER_A_FRIEND_ERROR, 24);
+    data << uint32(err);
+    if (target && (err == ERR_REFER_A_FRIEND_NOT_IN_GROUP || err == ERR_REFER_A_FRIEND_SUMMON_OFFLINE_S))
+        data << target->GetName();
+
+    GetSession()->SendPacket(&data);
+}
+
+ReferAFriendError Player::GetReferFriendError(Player * target, bool summon)
+{
+    if (!target || target->GetTypeId() != TYPEID_PLAYER)
+        return summon ? ERR_REFER_A_FRIEND_SUMMON_OFFLINE_S : ERR_REFER_A_FRIEND_NO_TARGET;
+
+    if (!IsReferAFriendLinked(target))
+        return ERR_REFER_A_FRIEND_NOT_REFERRED_BY;
+
+    if (Group * gr1 = GetGroup())
+    {
+        Group * gr2 = target->GetGroup();
+
+        if (!gr2 || gr1 != gr2)
+            return ERR_REFER_A_FRIEND_NOT_IN_GROUP;
+    }
+
+    if (summon)
+    {
+        if (HasSpellCooldown(45927))
+            return ERR_REFER_A_FRIEND_SUMMON_COOLDOWN;
+        if (target->getLevel() > sWorld.getConfig(CONFIG_UINT32_RAF_MAXGRANTLEVEL))
+            return ERR_REFER_A_FRIEND_SUMMON_LEVEL_MAX_I;
+
+        if (MapEntry const* mEntry = sMapStore.LookupEntry(GetMapId()))
+        if (mEntry->Expansion() > target->GetSession()->Expansion())
+            return ERR_REFER_A_FRIEND_INSUF_EXPAN_LVL;
+    }
+    else
+    {
+        if (GetTeam() != target->GetTeam() && !sWorld.getConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_GROUP))
+            return ERR_REFER_A_FRIEND_DIFFERENT_FACTION;
+        if (getLevel() <= target->getLevel())
+            return ERR_REFER_A_FRIEND_TARGET_TOO_HIGH;
+        if (!GetGrantableLevels())
+            return ERR_REFER_A_FRIEND_INSUFFICIENT_GRANTABLE_LEVELS;
+        if (GetDistance(target) > DEFAULT_VISIBILITY_DISTANCE || !target->IsVisibleGloballyfor(this))
+            return ERR_REFER_A_FRIEND_TOO_FAR;
+        if (target->getLevel() >= sWorld.getConfig(CONFIG_UINT32_RAF_MAXGRANTLEVEL))
+            return ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I;
+    }
+
+    return ERR_REFER_A_FRIEND_NONE;
+}
+
+void Player::ChangeGrantableLevels(uint8 increase)
+{
+    if (increase)
+    {
+        if (m_GrantableLevelsCount <= uint32(sWorld.getConfig(CONFIG_UINT32_RAF_MAXGRANTLEVEL) * sWorld.getConfig(CONFIG_FLOAT_RATE_RAF_LEVELPERLEVEL)))
+            m_GrantableLevelsCount = increase;
+    }
+    else
+    {
+        m_GrantableLevelsCount -= 1;
+
+        if (m_GrantableLevelsCount < 0)
+            m_GrantableLevelsCount = 0;
+    }
+
+    // set/unset flag - granted levels
+    if (m_GrantableLevelsCount > 0)
+    {
+        if (!HasByteFlag(PLAYER_FIELD_BYTES, 1, 0x01))
+            SetByteFlag(PLAYER_FIELD_BYTES, 1, 0x01);
+    }
+    else
+    {
+        if (HasByteFlag(PLAYER_FIELD_BYTES, 1, 0x01))
+            RemoveByteFlag(PLAYER_FIELD_BYTES, 1, 0x01);
+    }
+
+}
+
+bool Player::CheckRAFConditions()
+{
+    if (Group * grp = GetGroup())
+    {
+        for (GroupReference *itr = grp->GetFirstMember(); itr != NULL; itr = itr->next())
+        {
+            Player* member = itr->getSource();
+
+            if (!member || !member->isAlive())
+                continue;
+
+            if (GetObjectGuid() == member->GetObjectGuid())
+                continue;
+
+            if (member->GetAccountLinkedState() == STATE_NOT_LINKED)
+                continue;
+
+            if (GetDistance(member) < 100 && (getLevel() <= member->getLevel() + 4))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+AccountLinkedState Player::GetAccountLinkedState()
+{
+
+    if (!m_referredAccounts.empty() && !m_referalAccounts.empty())
+        return STATE_DUAL;
+
+    if (!m_referredAccounts.empty())
+        return STATE_REFER;
+
+    if (!m_referalAccounts.empty())
+        return STATE_REFERRAL;
+
+    return STATE_NOT_LINKED;
+}
+
+void Player::LoadAccountLinkedState()
+{
+    m_referredAccounts.clear();
+    m_referredAccounts = AccountMgr::GetRAFAccounts(GetSession()->GetAccountId(), true);
+
+    if (m_referredAccounts.size() > sWorld.getConfig(CONFIG_UINT32_RAF_MAXREFERERS))
+        sLog.outLog(LOG_DEFAULT, "Player:RAF:Warning: loaded %u referred accounts instead of %u for player %u", m_referredAccounts.size(), sWorld.getConfig(CONFIG_UINT32_RAF_MAXREFERERS), GetObjectGuid().GetCounter());
+    else
+        DEBUG_LOG("Player:RAF: loaded %u referred accounts for player %u", m_referredAccounts.size(), GetObjectGuid().GetCounter());
+
+    m_referalAccounts.clear();
+    m_referalAccounts = AccountMgr::GetRAFAccounts(GetSession()->GetAccountId(), false);
+
+    if (m_referalAccounts.size() > sWorld.getConfig(CONFIG_UINT32_RAF_MAXREFERALS))
+        sLog.outLog(LOG_DEFAULT, "Player:RAF:Warning: loaded %u referal accounts instead of %u for player %u", m_referalAccounts.size(), sWorld.getConfig(CONFIG_UINT32_RAF_MAXREFERALS), GetObjectGuid().GetCounter());
+    else
+        DEBUG_LOG("Player:RAF: loaded %u referal accounts for player %u", m_referalAccounts.size(), GetObjectGuid().GetCounter());
+}
+
+bool Player::IsReferAFriendLinked(Player* target)
+{
+    // check link this(refer) - target(referral)
+    for (std::vector<uint32>::const_iterator itr = m_referalAccounts.begin(); itr != m_referalAccounts.end(); ++itr)
+    {
+        if ((*itr) == target->GetSession()->GetAccountId())
+            return true;
+    }
+
+    // check link target(refer) - this(referral)
+    for (std::vector<uint32>::const_iterator itr = m_referredAccounts.begin(); itr != m_referredAccounts.end(); ++itr)
+    {
+        if ((*itr) == target->GetSession()->GetAccountId())
+            return true;
+    }
+
+    return false;
+}
+
+void Player::ChangeRace(uint8 new_race)
+{
+    static uint16 CapitalForRace[] = {0,72,76,47,69,68,81,54,530,0,911,930};
+
+    sLog.outLog(LOG_CHAR,"Starting race change for player %s [%u]",GetName(),GetGUIDLow());
+    Races old_race = Races(getRace());
+
+    if (bool((1 << new_race) & 0x44D) != bool((1 << old_race) & 0x2B2))
+    {
+        sLog.outLog(LOG_CHAR,"Race change: invalid race change, trans-faction NYI");
+        return;
+    }
+
+    const PlayerInfo* new_info = sObjectMgr.GetPlayerInfo(new_race,getClass());
+    if (!new_info)
+    {
+        sLog.outLog(LOG_CHAR,"Race change: invalid race/class pair");
+        return;
+    }
+
+    if (getGender() == GENDER_FEMALE)
+    {
+        SetDisplayId(new_info->displayId_f);
+        SetNativeDisplayId(new_info->displayId_f);
+    }
+    else
+    {
+        SetDisplayId(new_info->displayId_m);
+        SetNativeDisplayId(new_info->displayId_m);
+    }
+
+    uint32 unitbytes0 = GetUInt32Value(UNIT_FIELD_BYTES_0) & 0xFFFFFF00;
+    unitbytes0 |= new_race;
+    SetUInt32Value(UNIT_FIELD_BYTES_0, unitbytes0);
+
+    //spells
+    const PlayerInfo* old_info = sObjectMgr.GetPlayerInfo(old_race,getClass());
+    std::list<CreateSpellPair>::const_iterator spell_itr;
+    for (spell_itr = old_info->spell.begin(); spell_itr!=old_info->spell.end(); ++spell_itr)
+    {
+        uint16 tspell = spell_itr->first;
+        if (tspell)
+            removeSpell(tspell);
+    }
+
+    if (getClass() == CLASS_PRIEST)
+    {
+        removeSpell(2651);
+        removeSpell(2652);
+        removeSpell(2944);
+        removeSpell(9035);
+        removeSpell(10797);
+        removeSpell(13896);
+        removeSpell(13908);
+        removeSpell(18137);
+        removeSpell(32548);
+        removeSpell(32676);
+        removeSpell(44041);
+    }
+
+    for (spell_itr = new_info->spell.begin(); spell_itr!=new_info->spell.end(); ++spell_itr)
+    {
+        uint16 tspell = spell_itr->first;
+        if (tspell)
+            learnSpell(tspell);
+    }
+
+    //reps
+    setFaction(Player::getFactionForRace(new_race));
+    GetReputationMgr().SwitchReputation(CapitalForRace[old_race],CapitalForRace[new_race]);
+
+    //Items??
+    sLog.outLog(LOG_CHAR,"Race change for player %s [%u] succesful",GetName(),GetGUIDLow());
+}
+
+void Player::SetCanWhisperToGM(bool on)
+{
+    if (on)
+    {
+        m_ExtraFlags |= PLAYER_EXTRA_CAN_WHISP_TO_GM;
+        sSocialMgr.canWhisperToGMList.push_back(GetGUID());
+    }
+    else
+    {
+        m_ExtraFlags &= ~PLAYER_EXTRA_CAN_WHISP_TO_GM;
+        sSocialMgr.canWhisperToGMList.remove(GetGUID());
+    }
 }

@@ -266,9 +266,11 @@ enum TrinityStrings
     LANG_COMMAND_KICKMESSAGE            = 282,
     LANG_COMMAND_KICKNOTFOUNDPLAYER     = 283,
     LANG_COMMAND_WHISPERACCEPTING       = 284,
-    LANG_COMMAND_WHISPERON              = 285,
-    LANG_COMMAND_WHISPEROFF             = 286,
+    LANG_YOU_CAN_WHISPER_TO_GM_ON       = 285,
+    LANG_YOU_CAN_WHISPER_TO_GM_OFF      = 286,
     LANG_COMMAND_CREATGUIDNOTFOUND      = 287,
+    LANG_COMMAND_CAN_WHISPER_GM_ON      = 288,
+    LANG_COMMAND_CAN_WHISPER_GM_OFF     = 289,
     // TICKET STRINGS NEED REWRITE // 288-296 FREE
 
     // END
@@ -330,6 +332,9 @@ enum TrinityStrings
     LANG_MUTEINFO_HISTORYENTRY          = 349,
     LANG_MUTEINFO_YES                   = 350,
     LANG_MUTEINFO_NO                    = 351,
+    LANG_MUTEINFO_TROLLMUTE_HISTORY     = 352,
+    LANG_MUTEINFO_NOACCOUNT_TROLLMUTE   = 353,
+    LANG_GM_TROLLMUTED_PLAYER           = 354,
 
     // Room for more level 2              346-399 not used
 
@@ -702,6 +707,7 @@ enum TrinityStrings
     LANG_MOVEGENS_FOLLOW_CREATURE       = 790,
     LANG_MOVEGENS_FOLLOW_NULL           = 791,
     LANG_MOVEGENS_EFFECT                = 792,
+    LANG_HDEV_ANNOUNCE_COLOR            = 793,
 
     LANG_BG_GROUP_TOO_LARGE             = 1122, // "Your group is too large for this battleground. Please regroup to join."
     LANG_ARENA_GROUP_TOO_LARGE          = 1123, // "Your group is too large for this arena. Please regroup to join."
@@ -777,6 +783,9 @@ enum TrinityStrings
     // Debug commands
     LANG_CINEMATIC_NOT_EXIST            = 1200,
     // Room for more debug                1201-1299 not used
+
+    LANG_COMMAND_FRIEND                 = 1700,
+    LANG_COMMAND_FRIEND_ERROR           = 1701,
 
     // Ticket Strings 2000-2029
     LANG_COMMAND_TICKETNEW              = 2000,

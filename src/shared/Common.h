@@ -172,25 +172,27 @@ enum TimeConstants
 
 enum AccountPermissionMasks
 {
-    PERM_PLAYER         = 0x000001,
-    PERM_DEVELOPER      = 0x000002,
+    PERM_PLAYER         = 0x000001, //  1
+    PERM_DEVELOPER      = 0x000002, //  2
+    PERM_HEAD_DEVELOPER = 0x000100, //  256
 
-    PERM_GM_TRIAL       = 0x000100,
-    PERM_GM_HELPER      = 0x000200,
+    PERM_GM_TRIAL       = 0x000200, //  512
+    PERM_GM_HELPER      = 0x000400, //  1024
 
-    PERM_GM_HEAD        = 0x000800,
+    PERM_GM_HEAD        = 0x000800, //  2048
 
-    PERM_ADM_NORM       = 0x001000,
-    PERM_ADM_HEAD       = 0x002000,
+    PERM_ADM_NORM       = 0x001000, //  4096
+    PERM_ADM_HEAD       = 0x002000, //  8192
 
-    PERM_CONSOLE        = 0x800000,
+    PERM_CONSOLE        = 0x800000, //  8388608
 
-    PERM_GMT            = PERM_GM_TRIAL | PERM_GM_HELPER | PERM_GM_HEAD,
+    PERM_GMT            = PERM_GM_TRIAL | PERM_GM_HELPER | PERM_GM_HEAD | PERM_ADM_NORM | PERM_ADM_HEAD,
     PERM_ADM            = PERM_ADM_NORM | PERM_ADM_HEAD,
     PERM_HIGH_GMT       = PERM_ADM | PERM_GM_HEAD,
-    PERM_GMT_DEV        = PERM_GMT | PERM_DEVELOPER,
-    PERM_HIGH_DEV       = PERM_HIGH_GMT | PERM_DEVELOPER,
-    PERM_ALL            = PERM_PLAYER | PERM_GMT_DEV | PERM_ADM
+    PERM_GMT_HDEV       = PERM_GMT | PERM_HEAD_DEVELOPER,
+    PERM_GMT_DEV        = PERM_GMT | PERM_DEVELOPER | PERM_HEAD_DEVELOPER,
+    PERM_HIGH_DEV       = PERM_HIGH_GMT | PERM_DEVELOPER | PERM_HEAD_DEVELOPER,
+    PERM_ALL            = PERM_PLAYER | PERM_GMT_DEV
 };
 
 enum AccountStates
@@ -203,7 +205,8 @@ enum AccountStates
 enum PunishmentTypes
 {
     PUNISHMENT_MUTE     = 1,
-    PUNISHMENT_BAN      = 2
+    PUNISHMENT_BAN      = 2,
+    PUNISHMENT_TROLLMUTE= 3
 };
 
 enum ClientOSVersion

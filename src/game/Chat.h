@@ -61,7 +61,7 @@ class ChatHandler
         }
 
         static char* LineFromMessage(char*& pos) { char* start = strtok(pos,"\n"); pos = NULL; return start; }
-        static std::string GetNameLink(std::string & name);
+        static std::string GetNameLink(const std::string & name);
 
         virtual const char *GetTrinityString(int32 entry) const;
 
@@ -100,7 +100,7 @@ class ChatHandler
         bool HandleAccountDeleteCommand(const char* args);
         bool HandleAccountOnlineListCommand(const char* args);
         bool HandleAccountSetAddonCommand(const char* args);
-        bool HandleAccountSetGmLevelCommand(const char* args);
+        bool HandleAccountSetPermissionsCommand(const char* args);
         bool HandleAccountSetPasswordCommand(const char* args);
         bool HandleAccountWeatherCommand(const char*args);
         bool HandleAccountSpecialLogCommand(const char* args);
@@ -186,6 +186,10 @@ class ChatHandler
         bool HandleGameObjectStateCommand(const char* args);
         bool HandleGameObjectTargetCommand(const char* args);
         bool HandleGameObjectTurnCommand(const char* args);
+
+        bool HandleAccountFriendAddCommand(const char* args);
+        bool HandleAccountFriendDeleteCommand(const char* args);
+        bool HandleAccountFriendListCommand(const char* args);
 
         bool HandleGMAnnounceCommand(const char* args);
         bool HandleGMCommand(const char* args);
@@ -283,6 +287,7 @@ class ChatHandler
         bool HandleNpcAddMoveCommand(const char* args);
         bool HandleNpcChangeEntryCommand(const char *args);
         bool HandleNpcDeleteCommand(const char* args);
+        bool HandleNpcExtraFlagCommand(const char* args);
         bool HandleNpcFactionIdCommand(const char* args);
         bool HandleNpcFieldFlagCommand(const char* args);
         bool HandleNpcFlagCommand(const char* args);
@@ -295,6 +300,7 @@ class ChatHandler
         bool HandleNpcSetMoveTypeCommand(const char* args);
         bool HandleNpcSpawnDistCommand(const char* args);
         bool HandleNpcSpawnTimeCommand(const char* args);
+        bool HandleNpcStandState(const char* args);
         bool HandleNpcTameCommand(const char* args);
         bool HandleNpcTextEmoteCommand(const char* args);
         bool HandleNpcUnFollowCommand(const char* args);
@@ -459,6 +465,7 @@ class ChatHandler
         bool HandleTaxiCheatCommand(const char* args);
         bool HandleWhispersCommand(const char* args);
         bool HandleModifyDrunkCommand(const char* args);
+        bool HandleHDevAnnounceCommand(const char* args);
 
         bool HandleLoadScriptsCommand(const char* args);
 
@@ -474,6 +481,7 @@ class ChatHandler
         bool HandleNpcDelItemCommand(const char* args);
         bool HandleNpcChangeLevelCommand(const char* args);
         bool HandleGoCreatureCommand(const char* args);
+        bool HandleGoCreatureDirectCommand(const char* args);
         bool HandleGoObjectCommand(const char* args);
         bool HandleGoTicketCommand(const char* args);
         bool HandleGoTriggerCommand(const char* args);
@@ -481,6 +489,8 @@ class ChatHandler
         bool HandlePInfoCommand(const char* args);
         bool HandlePLimitCommand(const char* args);
         bool HandleMuteCommand(const char* args);
+        bool HandleTrollmuteCommand(const char* args);
+        bool HandleTrollmuteInfoCommand(const char* args);
         bool HandleUnmuteCommand(const char* args);
         bool HandleMuteInfoCommand(const char* args);
         bool HandleMovegensCommand(const char* args);

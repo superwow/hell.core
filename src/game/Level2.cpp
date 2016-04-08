@@ -144,7 +144,7 @@ bool ChatHandler::HandleMuteCommand(const char* args)
 
     AccountsDatabase.escape_string(author);
 
-    AccountsDatabase.PExecute("INSERT INTO account_punishment VALUES ('%u', '%u', UNIX_TIMESTAMP(), '%u', '%s', '%s')",
+    AccountsDatabase.PExecute("INSERT INTO account_punishment VALUES ('%u', '%u', UNIX_TIMESTAMP(), '%u', '%s', '%s', '1')",
                               account_id, PUNISHMENT_MUTE, uint64(mutetime), author.c_str(), mutereasonstr.c_str());
 
     SendGlobalGMSysMessage(LANG_GM_DISABLE_CHAT, author.c_str(), cname.c_str(), notspeaktime, mutereasonstr.c_str());
@@ -205,6 +205,8 @@ bool ChatHandler::HandleUnmuteCommand(const char* args)
 
     if (chr)
     {
+        chr->GetSession()->m_trollmuteTime = 0;
+        chr->GetSession()->m_trollmuteReason = "";
         if (chr->CanSpeak())
         {
             SendSysMessage(LANG_CHAT_ALREADY_ENABLED);
@@ -217,7 +219,7 @@ bool ChatHandler::HandleUnmuteCommand(const char* args)
         ChatHandler(chr).PSendSysMessage(LANG_YOUR_CHAT_ENABLED);
     }
 
-    AccountsDatabase.PExecute("UPDATE account_punishment SET expiration_date = UNIX_TIMESTAMP() WHERE account_id = '%u' AND punishment_type_id = '%u'", account_id, PUNISHMENT_MUTE);
+    AccountsDatabase.PExecute("UPDATE account_punishment SET active ='0' WHERE account_id = '%u' AND punishment_type_id IN ('%u','%u')", account_id, PUNISHMENT_MUTE, PUNISHMENT_TROLLMUTE);
 
     std::string author;
 
@@ -263,7 +265,7 @@ bool ChatHandler::HandleMuteInfoCommand(const char* args)
         return true;
     }
 
-    QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT FROM_UNIXTIME(punishment_date), expiration_date-punishment_date, expiration_date, reason, punished_by "
+    QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT FROM_UNIXTIME(punishment_date), expiration_date-punishment_date, expiration_date, reason, punished_by, active "
                                                         "FROM account_punishment "
                                                         "WHERE account_id = '%u' AND punishment_type_id = '%u' "
                                                         "ORDER BY punishment_date ASC", accountid, PUNISHMENT_MUTE);
@@ -283,7 +285,7 @@ bool ChatHandler::HandleMuteInfoCommand(const char* args)
         uint64 muteLength = fields[1].GetUInt64();
 
         bool active = false;
-        if (muteLength == 0 || unmutedate >= time(NULL))
+        if ((muteLength == 0 || unmutedate >= time(NULL)) && fields[5].GetBool())
             active = true;
 
         std::string mutetime = secsToTimeString(muteLength, true);
@@ -668,6 +670,57 @@ bool ChatHandler::HandleGoCreatureCommand(const char* args)
     _player->InterruptTaxiFlying();
 
     _player->TeleportTo(mapid, x, y, z, ort);
+    return true;
+}
+
+bool ChatHandler::HandleGoCreatureDirectCommand(const char* args)
+{
+    if (!*args || !m_session)
+        return false;
+    uint32 lowguid = atoi(args);
+    CreatureData const* data = sObjectMgr.GetCreatureData(lowguid);
+    if (!data)
+    {
+        PSendSysMessage(LANG_COMMAND_CREATGUIDNOTFOUND, lowguid);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    QueryResultAutoPtr result = GameDataDatabase.PQuery("SELECT map FROM creature WHERE guid = '%u'",lowguid);
+    if (!result)
+    {
+        SendSysMessage(LANG_COMMAND_GOCREATNOTFOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+    uint16 mapid = result->Fetch()[0].GetUInt16();
+    Map* map;
+    
+    if (m_session->GetPlayer()->GetMap()->GetId() == mapid)
+        map = m_session->GetPlayer()->GetMap();
+    else
+        map = sMapMgr.FindMap(mapid);
+
+    if (!map)
+    {
+        SendSysMessage(LANG_COMMAND_GOCREATNOTFOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    Creature* creature = map->GetCreature(MAKE_NEW_GUID(lowguid,data->id,HIGHGUID_UNIT));
+    if (!creature)
+        {
+        SendSysMessage(LANG_COMMAND_GOCREATNOTFOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    m_session->GetPlayer()->InterruptTaxiFlying();
+    
+    WorldLocation loc;
+    creature->GetPosition(loc);
+    m_session->GetPlayer()->TeleportTo(loc);
     return true;
 }
 
@@ -1642,6 +1695,35 @@ bool ChatHandler::HandleNpcFieldFlagCommand(const char* args)
 
     return true;
 }
+
+bool ChatHandler::HandleNpcExtraFlagCommand(const char* args)
+{
+    if (!*args)
+        return false;
+
+    uint32 Flags = (uint32) atoi((char*)args);
+
+    Creature* pCreature = getSelectedCreature();
+
+    if (!pCreature)
+    {
+        SendSysMessage(LANG_SELECT_CREATURE);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    if (CreatureInfo const *cinfo = pCreature->GetCreatureInfo())
+    {
+        const_cast<CreatureInfo*>(cinfo)->flags_extra = Flags;
+    }
+
+    GameDataDatabase.PExecuteLog("UPDATE creature_template SET flags_extra = '%u' WHERE entry = '%u'", Flags, pCreature->GetEntry());
+
+    SendSysMessage(LANG_VALUE_SAVED_REJOIN);
+
+    return true;
+}
+
 //set model of creature
 bool ChatHandler::HandleNpcSetModelCommand(const char* args)
 {
@@ -1895,6 +1977,10 @@ bool ChatHandler::HandlePInfoCommand(const char* args)
         level = fields[1].GetUInt32();
         money = fields[2].GetUInt32();
         accId = fields[3].GetUInt32();
+        race = fields[4].GetUInt8();
+        Class = fields[5].GetUInt8();
+
+
     }
 
     std::string username = GetTrinityString(LANG_ERROR);
@@ -1903,12 +1989,12 @@ bool ChatHandler::HandlePInfoCommand(const char* args)
     uint32 permissions = 0;
     std::string last_login = GetTrinityString(LANG_ERROR);
 
-    QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT username, permission_mask, email, ip, login_date"
-                                                        "FROM account JOIN account_permissions ON account.account_id = account_permissions.account_id "
-                                                        "    JOIN account_login ON account.account_id = account_login.account_id "
-                                                        "WHERE account.account_id = '%u' AND realmd_id = '%u'"
-                                                        "ORDER BY login_date DESC "
-                                                        "LIMIT 1", accId, realmID);
+
+    QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT a.username,ap.permission_mask,a.email,a.last_ip,a.last_login "
+                                                       "FROM account a "
+                                                       "LEFT JOIN account_permissions ap "
+                                                       "ON (a.account_id = ap.account_id) "
+                                                       "WHERE a.account_id = '%u'",accId);
 
     if (result)
     {
@@ -4484,6 +4570,163 @@ bool ChatHandler::HandleGuildEnableAnnounceCommand(const char *args)
     guild->RemoveFlag(GUILD_FLAG_DISABLE_ANN);
     guild->BroadcastToGuild(m_session, "Guild announce system has been enabled for that guild");
     PSendSysMessage("Guild announce system has been enabled for guild %s", guildName.c_str());
+
+    return true;
+}
+
+bool ChatHandler::HandleTrollmuteCommand(const char* args)
+{
+    if (!*args)
+        return false;
+
+    char *charname = strtok((char*)args, " ");
+    if (!charname)
+        return false;
+
+    std::string cname = charname;
+
+    char *timetonotspeak = strtok(NULL, " ");
+    if (!timetonotspeak)
+        return false;
+
+    char *mutereason = strtok(NULL, "");
+    std::string mutereasonstr;
+    if (!mutereason)
+        mutereasonstr = "No reason.";
+    else
+        mutereasonstr = mutereason;
+
+    uint32 notspeaktime = (uint32) atoi(timetonotspeak);
+
+    if (notspeaktime == 0)
+        return false;
+
+    if (!normalizePlayerName(cname))
+    {
+        SendSysMessage(LANG_PLAYER_NOT_FOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    uint64 guid = sObjectMgr.GetPlayerGUIDByName(cname.c_str());
+    if (!guid)
+    {
+        SendSysMessage(LANG_PLAYER_NOT_FOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    Player *chr = sObjectMgr.GetPlayer(guid);
+
+    // check security
+    uint32 account_id = 0;
+    uint32 permissions = 0;
+
+    if (chr)
+    {
+        account_id = chr->GetSession()->GetAccountId();
+        permissions = chr->GetSession()->GetPermissions();
+    }
+    else
+    {
+        account_id = sObjectMgr.GetPlayerAccountIdByGUID(guid);
+        permissions = AccountMgr::GetPermissions(account_id);
+    }
+
+    if (m_session && permissions >= m_session->GetPermissions())
+    {
+        SendSysMessage(LANG_YOURS_SECURITY_IS_LOW);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    time_t mutetime = time(NULL) + notspeaktime*60;
+
+    AccountsDatabase.escape_string(mutereasonstr);
+
+    if (chr)
+    {
+        chr->GetSession()->m_trollmuteTime = mutetime;
+        chr->GetSession()->m_trollmuteReason = mutereasonstr;
+    }
+
+    std::string author;
+
+    if (m_session)
+        author = m_session->GetPlayerName();
+    else
+        author = "[CONSOLE]";
+
+    AccountsDatabase.escape_string(author);
+
+    AccountsDatabase.PExecute("INSERT INTO account_punishment VALUES ('%u', '%u', UNIX_TIMESTAMP(), '%u', '%s', '%s', '1')",
+                              account_id, PUNISHMENT_TROLLMUTE, uint64(mutetime), author.c_str(), mutereasonstr.c_str());
+
+    SendGlobalGMSysMessage(LANG_GM_TROLLMUTED_PLAYER, author.c_str(), cname.c_str(), notspeaktime, mutereasonstr.c_str());
+
+    return true;
+}
+
+bool ChatHandler::HandleTrollmuteInfoCommand(const char* args)
+{
+    if (!args)
+        return false;
+
+    char* cname = strtok ((char*)args, "");
+    if (!cname)
+        return false;
+
+    std::string name = cname;
+    if (!normalizePlayerName(name))
+    {
+        SendSysMessage(LANG_PLAYER_NOT_FOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    uint32 accountid = sObjectMgr.GetPlayerAccountIdByPlayerName(name);
+    if (!accountid)
+    {
+        SendSysMessage(LANG_PLAYER_NOT_FOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    std::string accountname;
+    if (!AccountMgr::GetName(accountid,accountname))
+    {
+        PSendSysMessage(LANG_MUTEINFO_NOCHARACTER);
+        return true;
+    }
+
+    QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT FROM_UNIXTIME(punishment_date), expiration_date-punishment_date, expiration_date, reason, punished_by, active "
+                                    "FROM account_punishment "
+                                    "WHERE account_id = '%u' AND punishment_type_id = '%u' "
+                                    "ORDER BY punishment_date ASC", accountid, PUNISHMENT_TROLLMUTE);
+
+    if (!result)
+    {
+        PSendSysMessage(LANG_MUTEINFO_NOACCOUNT_TROLLMUTE, accountname.c_str());
+        return true;
+    }
+
+    PSendSysMessage(LANG_MUTEINFO_TROLLMUTE_HISTORY, accountname.c_str());
+    do
+    {
+        Field* fields = result->Fetch();
+
+        time_t unmutedate = time_t(fields[2].GetUInt64());
+        uint64 muteLength = fields[1].GetUInt64();
+
+        bool active = false;
+        if ((muteLength == 0 || unmutedate >= time(NULL)) && fields[5].GetBool())
+            active = true;
+
+        std::string mutetime = secsToTimeString(muteLength, true);
+        PSendSysMessage(LANG_MUTEINFO_HISTORYENTRY,
+            fields[0].GetString(), mutetime.c_str(), active ? GetTrinityString(LANG_MUTEINFO_YES):GetTrinityString(LANG_MUTEINFO_NO), fields[3].GetString(), fields[4].GetString());
+    }
+    while (result->NextRow());
 
     return true;
 }

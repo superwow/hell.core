@@ -282,7 +282,7 @@ void World::AddSession_ (WorldSession* s)
     if (decrease_session)
         --Sessions;
 
-    if (pLimit > 0 && Sessions >= pLimit && !s->HasPermissions(PERM_GMT))
+    if (pLimit > 0 && Sessions >= pLimit && !s->HasPermissions(PERM_GMT_HDEV))
     {
         if (!sObjectMgr.IsUnqueuedAccount(s->GetAccountId()) && !HasRecentlyDisconnected(s))
         {
@@ -600,6 +600,8 @@ void World::LoadConfigSettings(bool reload)
 
     m_configs[CONFIG_RETURNOLDMAILS_MODE] = sConfig.GetIntDefault("Mail.OldReturnMode", 0);
     m_configs[CONFIG_RETURNOLDMAILS_INTERVAL] = sConfig.GetIntDefault("Mail.OldReturnTimer", 60);
+    
+    m_configs[CONFIG_ACTIVE_BANS_UPDATE_TIME] = sConfig.GetIntDefault("ActiveBansUpdateTime",30000);
 
     m_configs[CONFIG_COMPRESSION] = sConfig.GetIntDefault("Compression", 1);
     if (m_configs[CONFIG_COMPRESSION] < 1 || m_configs[CONFIG_COMPRESSION] > 9)
@@ -624,6 +626,9 @@ void World::LoadConfigSettings(bool reload)
     m_configs[CONFIG_BATTLEGROUND_ANNOUNCE_START] = sConfig.GetIntDefault("BattleGround.AnnounceStart", 0);
     m_configs[CONFIG_BATTLEGROUND_QUEUE_INFO] = sConfig.GetIntDefault("BattleGround.QueueInfo", 0);
     m_configs[CONFIG_BATTLEGROUND_TIMER_INFO] = sConfig.GetBoolDefault("BattleGround.TimerInfo");
+    m_configs[CONFIG_BATTLEGROUND_WSG_END_AFTER_ENABLED] = sConfig.GetBoolDefault("BattleGround.WSGEndAfter.Enabled",false);
+    m_configs[CONFIG_BATTLEGROUND_WSG_END_AFTER_TIME] = sConfig.GetIntDefault("BatleGround.WSGEndAfter.Time",1800000);
+    m_configs[CONFIG_BATTLEGROUND_WSG_END_AFTER_ALWAYS_DRAW] = sConfig.GetBoolDefault("BattleGround.WSGEndAfter.AlwaysDraw",true);
 
     m_configs[CONFIG_INTERVAL_MAPUPDATE] = sConfig.GetIntDefault("MapUpdateInterval", 100);
     if (m_configs[CONFIG_INTERVAL_MAPUPDATE] < MIN_MAP_UPDATE_DELAY)
@@ -727,6 +732,12 @@ void World::LoadConfigSettings(bool reload)
         sLog.outLog(LOG_DEFAULT, "ERROR: MaxPlayerLevel (%i) must be in range 1..%u. Set to %u.",m_configs[CONFIG_MAX_PLAYER_LEVEL],MAX_LEVEL,MAX_LEVEL);
         m_configs[CONFIG_MAX_PLAYER_LEVEL] = MAX_LEVEL;
     }
+
+    setConfig(CONFIG_UINT32_RAF_MAXGRANTLEVEL, sConfig.GetIntDefault("RAF.MaxGrantLevel", 60));
+    setConfig(CONFIG_UINT32_RAF_MAXREFERALS, sConfig.GetIntDefault("RAF.MaxReferals", 5));
+    setConfig(CONFIG_UINT32_RAF_MAXREFERERS, sConfig.GetIntDefault("RAF.MaxReferers", 5));
+    setConfig(CONFIG_FLOAT_RATE_RAF_XP, sConfig.GetFloatDefault("Rate.RAF.XP", 3.0f));
+    setConfig(CONFIG_FLOAT_RATE_RAF_LEVELPERLEVEL, sConfig.GetFloatDefault("Rate.RAF.LevelPerLevel", 0.5f));
 
     m_configs[CONFIG_START_PLAYER_LEVEL] = sConfig.GetIntDefault("StartPlayerLevel", 1);
     if (m_configs[CONFIG_START_PLAYER_LEVEL] < 1)
@@ -981,6 +992,8 @@ void World::LoadConfigSettings(bool reload)
     m_configs[CONFIG_ENABLE_ARENA_STEP_BY_STEP_MATCHING] = sConfig.GetBoolDefault("ArenaStepByStep.Enable",false);
     m_configs[CONFIG_ARENA_STEP_BY_STEP_TIME] = sConfig.GetIntDefault("ArenaStepByStep.Time",60000);
     m_configs[CONFIG_ARENA_STEP_BY_STEP_VALUE] = sConfig.GetIntDefault("ArenaStepByStep.Value",100);
+    m_configs[CONFIG_ARENA_END_AFTER_TIME] = sConfig.GetIntDefault("Arena.EndAfter.Time",0);
+    m_configs[CONFIG_ARENA_END_AFTER_ALWAYS_DRAW] = sConfig.GetBoolDefault("Arena.EndAfter.AlwaysDraw",false);
 
     m_configs[CONFIG_BATTLEGROUND_PREMATURE_FINISH_TIMER] = sConfig.GetIntDefault("BattleGround.PrematureFinishTimer", 0);
     m_configs[CONFIG_INSTANT_LOGOUT] = sConfig.GetIntDefault("InstantLogout", PERM_GMT);
@@ -1089,6 +1102,7 @@ void World::LoadConfigSettings(bool reload)
     m_configs[CONFIG_WARDEN_ENABLED] = sConfig.GetBoolDefault("Warden.Enabled", true);
     m_configs[CONFIG_WARDEN_KICK] = sConfig.GetBoolDefault("Warden.Kick", true);
     m_configs[CONFIG_WARDEN_BAN] = sConfig.GetBoolDefault("Warden.Ban", true);
+    m_configs[CONFIG_WARDEN_LOG_ONLY_CHECK] = sConfig.GetIntDefault("Warden.LogOnlyCheck",0);
     m_configs[CONFIG_DONT_DELETE_CHARS] = sConfig.GetBoolDefault("DontDeleteChars", false);
     m_configs[CONFIG_DONT_DELETE_CHARS_LVL] = sConfig.GetIntDefault("DontDeleteCharsLvl", 40);
     m_configs[CONFIG_KEEP_DELETED_CHARS_TIME] = sConfig.GetIntDefault("KeepDeletedCharsTime", 31);
@@ -1115,6 +1129,8 @@ void World::LoadConfigSettings(bool reload)
     m_configs[CONFIG_VMSS_FREEZEDETECTTIME] = sConfig.GetIntDefault("VMSS.MapFreezeDetectTime", 1000);
 
     m_configs[CONFIG_ENABLE_CUSTOM_XP_RATES] = sConfig.GetBoolDefault("EnableCustomXPRates", true);
+    m_configs[CONFIG_XP_RATE_MODIFY_ITEM_ENTRY] = sConfig.GetIntDefault("XPRateModifyItem.Entry",0);
+    m_configs[CONFIG_XP_RATE_MODIFY_ITEM_PCT] = sConfig.GetIntDefault("XPRateModifyItem.Pct",5);
 
     m_configs[CONFIG_SESSION_UPDATE_MAX_TIME] = sConfig.GetIntDefault("SessionUpdate.MaxTime", 1000);
     m_configs[CONFIG_SESSION_UPDATE_OVERTIME_METHOD] = sConfig.GetIntDefault("SessionUpdate.Method", 3);
@@ -1123,9 +1139,10 @@ void World::LoadConfigSettings(bool reload)
 
     m_configs[CONFIG_KICK_PLAYER_ON_BAD_PACKET] = sConfig.GetBoolDefault("Network.KickOnBadPacket", true);
 
-    m_configs[CONFIG_MIN_GM_COMMAND_LOG_LEVEL] = sConfig.GetIntDefault("GmLogMinLevel", 1);
+    m_configs[CONFIG_COMMAND_LOG_PERMISSION] = sConfig.GetIntDefault("CommandLogPermission", PERM_GMT_DEV);
 
     m_configs[CONFIG_PRIVATE_CHANNEL_LIMIT] = sConfig.GetIntDefault("Channel.PrivateLimitCount", 20);
+    m_configs[CONFIG_GLOBAL_TRADE_CHANNEL] = sConfig.GetBoolDefault("Channel.GlobalTradeChannel",true);
 
     m_configs[CONFIG_MMAP_ENABLED] = sConfig.GetIntDefault("mmap.enabled", true);
     sLog.outString("WORLD: mmap pathfinding %sabled", getConfig(CONFIG_MMAP_ENABLED) ? "en" : "dis");
@@ -1507,6 +1524,7 @@ void World::SetInitialWorldSettings()
     m_timers[WUPDATE_GUILD_ANNOUNCES].SetInterval(getConfig(CONFIG_GUILD_ANN_INTERVAL));
     m_timers[WUPDATE_DELETECHARS].SetInterval(DAY*IN_MILISECONDS); // check for chars to delete every day
     m_timers[WUPDATE_OLDMAILS].SetInterval(getConfig(CONFIG_RETURNOLDMAILS_INTERVAL)*1000);
+    m_timers[WUPDATE_ACTIVE_BANS].SetInterval(getConfig(CONFIG_ACTIVE_BANS_UPDATE_TIME));
 
     //to set mailtimer to return mails every day between 4 and 5 am
     //mailtimer is increased when updating auctions
@@ -1884,7 +1902,20 @@ void World::Update(uint32 diff)
         m_timers[WUPDATE_EVENTS].Reset();
         diffRecorder.RecordTimeFor("UpdateGameEvents");
     }
+    
+    if (m_timers[WUPDATE_ACTIVE_BANS].Passed())
+    {
+        m_timers[WUPDATE_ACTIVE_BANS].Reset();
 
+        static SqlStatementID updateBansStmt;
+        SqlStatement stmt = AccountsDatabase.CreateStatement(updateBansStmt,"UPDATE account_punishment "
+            "SET active = 0 WHERE expiration_date <= UNIX_TIMESTAMP() AND expiration_date <> punishment_date "
+            "AND punishment_type_id IN (?,?,?)");
+        stmt.addUInt8(PUNISHMENT_BAN);
+        stmt.addUInt8(PUNISHMENT_MUTE);
+        stmt.addUInt8(PUNISHMENT_TROLLMUTE);
+        stmt.Execute();
+    }
     /// </ul>
 
     // update the instance reset times
@@ -2038,7 +2069,7 @@ void World::SendGlobalGMMessage(WorldPacket *packet, WorldSession *self, uint32 
             itr->second->GetPlayer() &&
             itr->second->GetPlayer()->IsInWorld() &&
             itr->second != self &&
-            itr->second->HasPermissions(PERM_GMT) &&
+            itr->second->HasPermissions(sWorld.getConfig(CONFIG_MIN_GM_TEXT_LVL)) &&
             (team == 0 || itr->second->GetPlayer()->GetTeam() == team))
         {
             itr->second->SendPacket(packet);
@@ -2074,7 +2105,7 @@ void World::SendWorldText(int32 string_id, uint32 preventFlags, ...)
             char buf[1000];
 
             va_list argptr;
-            va_start(argptr, string_id);
+            va_start(argptr, preventFlags);
             vsnprintf(buf,1000, text, argptr);
             va_end(argptr);
 
@@ -2360,7 +2391,7 @@ BanReturn World::BanAccount(BanMode mode, std::string nameIPOrMail, std::string 
         uint32 account = fieldsAccount[0].GetUInt32();
         uint32 permissions = PERM_PLAYER;
 
-        QueryResultAutoPtr resultAccPerm = AccountsDatabase.PQuery("SELECT permiossion_mask FROM account_permissions WHERE account_id = '%u' AND realm_id = '%u')", account, realmID);
+        QueryResultAutoPtr resultAccPerm = AccountsDatabase.PQuery("SELECT permission_mask FROM account_permissions WHERE account_id = '%u' AND realm_id = '%u')", account, realmID);
         if (resultAccPerm)
         {
             Field* fieldsAccId = resultAccPerm->Fetch();
@@ -2374,7 +2405,7 @@ BanReturn World::BanAccount(BanMode mode, std::string nameIPOrMail, std::string 
         if (mode != BAN_IP && mode != BAN_EMAIL)
         {
             //No SQL injection as strings are escaped
-            AccountsDatabase.PExecute("INSERT INTO account_punishment VALUES ('%u', '%u', UNIX_TIMESTAMP(), UNIX_TIMESTAMP()+%u, '%s', '%s')",
+            AccountsDatabase.PExecute("INSERT INTO account_punishment VALUES ('%u', '%u', UNIX_TIMESTAMP(), UNIX_TIMESTAMP()+%u, '%s', '%s', '1')",
                                     account, PUNISHMENT_BAN, duration_secs, safe_author.c_str(), reason.c_str());
         }
 
@@ -2412,7 +2443,7 @@ bool World::RemoveBanAccount(BanMode mode, std::string nameIPOrMail)
                 return false;
 
             //NO SQL injection as account is uint32
-            AccountsDatabase.PExecute("UPDATE account_punishment SET expiration_date = UNIX_TIMESTAMP() WHERE account_id = '%u' AND punishment_type_id = '%u'", account, PUNISHMENT_BAN);
+            AccountsDatabase.PExecute("UPDATE account_punishment SET active = '0' WHERE account_id = '%u' AND punishment_type_id = '%u'", account, PUNISHMENT_BAN);
 
             break;
     }

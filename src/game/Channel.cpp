@@ -80,6 +80,13 @@ void Channel::Join(uint64 p, const char *pass)
         }
     }
 
+    if (!m_ownerGUID && (!plr || !plr->CanSpeak())) // muted players can't create new channels
+    {
+        MakeBanned(&data);//no idea what to send
+        SendToOne(&data, p);
+        return;
+    }
+
     if (IsBanned(p) && (!plr || !plr->isGameMaster()))
     {
         MakeBanned(&data);
@@ -96,7 +103,7 @@ void Channel::Join(uint64 p, const char *pass)
 
     if (plr)
     {
-        if (HasFlag(CHANNEL_FLAG_LFG) &&
+        if (IsLFG() &&
             sWorld.getConfig(CONFIG_RESTRICTED_LFG_CHANNEL) && !plr->GetSession()->HasPermissions(PERM_GMT) &&
             plr->m_lookingForGroup.Empty())
         {
@@ -460,7 +467,7 @@ void Channel::List(Player* player)
         size_t pos = data.wpos();
         data << uint32(0);                                  // size of list, placeholder
 
-        bool gmInWhoList = sWorld.getConfig(CONFIG_GM_IN_WHO_LIST) || player->GetSession()->HasPermissions(PERM_GMT);
+        bool gmInWhoList = sWorld.getConfig(CONFIG_GM_IN_WHO_LIST) || player->GetSession()->HasPermissions(PERM_GMT_HDEV);
 
         uint32 count  = 0;
         for (PlayerList::iterator i = players.begin(); i != players.end(); ++i)
@@ -594,7 +601,27 @@ void Channel::Say(uint64 p, const char *what, uint32 lang)
         data << what;
         data << uint8(plr ? plr->chatTag() : 0);
 
-        SendToAll(&data, !players[p].IsModerator() ? p : false);
+        if (!plr || !plr->IsTrollmuted())
+        {
+            // exclude LFG from two-side channels
+            if (sWorld.getConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_CHANNEL) && IsLFG() && plr)
+            {
+                uint32 fromteam = plr->GetTeam();
+                for (PlayerList::iterator i = players.begin(); i != players.end(); ++i)
+                {
+                    Player *to = sObjectMgr.GetPlayer(i->first);
+                    if (!to || to->GetTeam() != fromteam)
+                        continue;
+
+                    if (!p || !to->GetSocial()->HasIgnore(GUID_LOPART(p)))
+                        to->SendPacketToSelf(&data);
+                }
+            }
+            else 
+            SendToAll(&data, !players[p].IsModerator() ? p : false);
+        }
+        else
+            plr->SendPacketToSelf(&data);
     }
 }
 

@@ -535,6 +535,14 @@ void Object::BuildValuesUpdate(uint8 updatetype, ByteBuffer * data, UpdateMask *
                     else
                         *data << uint32(0);                 // disable quest object
                 }
+                // hide RAF flag if need
+                else if (index == UNIT_DYNAMIC_FLAGS && GetTypeId() == TYPEID_PLAYER)
+                {
+                    if (!((Player*)this)->IsReferAFriendLinked(target))
+                        *data << (m_uint32Values[index] & ~UNIT_DYNFLAG_REFER_A_FRIEND);
+                    else
+                        *data << m_uint32Values[index];
+                }
                 else
                     *data << m_uint32Values[ index ];       // other cases
             }
@@ -1781,7 +1789,10 @@ void WorldObject::UpdateObjectVisibility(bool /*forced*/)
 {
     //updates object's visibility for nearby players
     Hellground::VisibleChangesNotifier notifier(*this);
-    Cell::VisitWorldObjects(this, notifier, GetMap()->GetVisibilityDistance() + World::GetVisibleObjectGreyDistance());
+    float radius = World::GetVisibleObjectGreyDistance();
+    if(Map* map = GetMap())
+        radius += map->GetVisibilityDistance();
+    Cell::VisitWorldObjects(this, notifier, radius);
 }
 
 void WorldObject::AddToClientUpdateList()

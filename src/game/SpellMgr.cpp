@@ -2365,6 +2365,48 @@ void SpellMgr::LoadSpellChains()
     mSpellChains[spell_id].last = 40120;
     mSpellChains[spell_id].rank = 2;
 
+    // Blessing of Kings
+    spell_id = 20217;
+    mSpellChains[spell_id].prev = 0;
+    mSpellChains[spell_id].next = 25898;
+    mSpellChains[spell_id].first = 20217;
+    mSpellChains[spell_id].last = 25898;
+    mSpellChains[spell_id].rank = 1;
+
+    // Greater Blessing of Kings
+    spell_id = 25898;
+    mSpellChains[spell_id].prev = 20217;
+    mSpellChains[spell_id].next = 0;
+    mSpellChains[spell_id].first = 20217;
+    mSpellChains[spell_id].last = 25898;
+    mSpellChains[spell_id].rank = 2;
+
+    // Greater Blessing of Sanctuary I
+    spell_id = 25899;
+    mSpellChains[spell_id].prev = 27168;    // BoS V
+    mSpellChains[spell_id].next = 27169;    // GBoS II
+    mSpellChains[spell_id].first = 20911;   // BoS I
+    mSpellChains[spell_id].last = 27169;    // GBoS II
+    mSpellChains[spell_id].rank = 6;
+
+    // link BoS V with GBoS I
+    mSpellChains[27168].next = spell_id;
+
+    // Greater Blessing of Sanctuary II
+    spell_id = 27169;
+    mSpellChains[spell_id].prev = 25899;    // GBoS I
+    mSpellChains[spell_id].next = 0;        // none
+    mSpellChains[spell_id].first = 20911;   // BoS I
+    mSpellChains[spell_id].last = 27169;    // GBoS II
+    mSpellChains[spell_id].rank = 7;
+
+    // set GBoS II as last for all BoS ranks
+    mSpellChains[20911].last = spell_id;
+    mSpellChains[20912].last = spell_id;
+    mSpellChains[20913].last = spell_id;
+    mSpellChains[20914].last = spell_id;
+    mSpellChains[27168].last = spell_id;
+
 //uncomment these two lines to print yourself list of spell_chains on startup
 //    for (UNORDERED_MAP<uint32, SpellChainNode>::iterator itr=mSpellChains.begin();itr!=mSpellChains.end();itr++)
 //       sLog.outString("Id: %u, Rank: %d , %s",itr->first,itr->second.rank, sSpellStore.LookupEntry(itr->first)->Rank[sWorld.GetDefaultDbcLocale()]);
@@ -2777,7 +2819,7 @@ void SpellMgr::LoadSpellCustomAttr()
         if (spellInfo->Effect[0] == SPELL_EFFECT_STUCK)
         {
             if (IsChanneledSpell(spellInfo))
-                spellInfo->ChannelInterruptFlags &= ~CHANNEL_FLAG_MOVEMENT;
+                spellInfo->ChannelInterruptFlags &= ~CHANNEL_INTERRUPT_FLAG_MOVEMENT;
             else
                 spellInfo->InterruptFlags &= ~SPELL_INTERRUPT_FLAG_MOVEMENT;
         }
@@ -2793,13 +2835,17 @@ void SpellMgr::LoadSpellCustomAttr()
         {
             case SPELLFAMILY_GENERIC:
             {
+                 if (spellInfo->Id == 52009)
+                     spellInfo->EffectMiscValue[0] = 20865;
                  // Goblin Rocket Launcher
-                 if (spellInfo->SpellIconID == 184 && spellInfo->Attributes == 4259840)
+                 else if (spellInfo->SpellIconID == 184 && spellInfo->Attributes == 4259840)
                      spellInfo->AttributesCu |= SPELL_ATTR_CU_NO_SPELL_DMG_COEFF;
                  else if (spellInfo->Id == 15852)
                      spellInfo->Dispel = DISPEL_NONE;
                  else if (spellInfo->Id == 46337) // Crab disguise
                      spellInfo->AuraInterruptFlags |= AURA_INTERRUPT_FLAG_CAST;
+                 else if (spellInfo->SpellIconID == 2367) // remove flag from steam tonk & crashin trashin racers
+                     spellInfo->AttributesEx4 &= ~SPELL_ATTR_EX4_FORCE_TRIGGERED;
                  break;
             }
             case SPELLFAMILY_SHAMAN:
@@ -2904,7 +2950,10 @@ void SpellMgr::LoadSpellCustomAttr()
                 spellInfo->AttributesCu |= SPELL_ATTR_CU_FIXED_DAMAGE;
                 break;
             case 16614:
-                spellInfo->AttributesCu |= SPELL_ATTR_CU_FIXED_DAMAGE; //Storm Gauntlets - temporary workaround for hell too big spell coef
+                spellInfo->AttributesCu |= SPELL_ATTR_CU_NO_SPELL_DMG_COEFF; //Storm Gauntlets - temporary workaround for hell too big spell coef
+                break;
+            case 7714:
+                spellInfo->AttributesCu |= SPELL_ATTR_CU_NO_SPELL_DMG_COEFF; //Fiery Plate Gauntlets - temporary workaround for hell too big spell coef (the same problem as Storm Gauntlets
                 break;
             /* NO SPELL DMG COEFF */
             // Enduring Light - T6 proc
@@ -3360,7 +3409,7 @@ void SpellMgr::LoadSpellCustomAttr()
                 spellInfo->AttributesEx2 &= ~SPELL_ATTR_EX2_IGNORE_LOS;
                 break;
             case 43383: // Spirit Bolts (HexLord)
-                spellInfo->ChannelInterruptFlags |= CHANNEL_FLAG_MOVEMENT;
+                spellInfo->ChannelInterruptFlags |= CHANNEL_INTERRUPT_FLAG_MOVEMENT;
                 spellInfo->InterruptFlags &= ~SPELL_INTERRUPT_FLAG_INTERRUPT;
                 break;
             case 29962: // Summon Elemental (Shade of Aran)
@@ -3406,6 +3455,7 @@ void SpellMgr::LoadSpellCustomAttr()
                 break;
             case 31790: // Righteous Defense taunt
                 spellInfo->DmgClass = SPELL_DAMAGE_CLASS_MELEE;
+                spellInfo->Attributes |= SPELL_ATTR_IMPOSSIBLE_DODGE_PARRY_BLOCK;
                 break;
             case 28509: // Greater Mana Regeneration - Elixir of Major Mageblood
             case 24363: // Mana Regeneration - Mageblood Potion
@@ -3458,6 +3508,9 @@ void SpellMgr::LoadSpellCustomAttr()
                 break;
             case 38829: // energy discharge hc
                 spellInfo->MaxAffectedTargets = 1;
+                break;
+            case 29838: //Second Wind (Rank 2)
+                spellInfo->procFlags &= ~PROC_FLAG_ON_TAKE_PERIODIC;
                 break;
             default:
                 break;

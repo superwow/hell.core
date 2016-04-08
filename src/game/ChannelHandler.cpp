@@ -41,6 +41,9 @@ void WorldSession::HandleChannelJoin(WorldPacket& recvPacket)
     CHECK_PACKET_SIZE(recvPacket, 4+1+1+(channelname.size()+1)+1);
 
     recvPacket >> pass;
+    if(channel_id == 2 && sWorld.getConfig(CONFIG_GLOBAL_TRADE_CHANNEL)) //magic number - trade channel id from DBC
+        channelname = "Trade";
+    
     if (ChannelMgr* cMgr = channelMgr(_player->GetTeam()))
         if (Channel *chn = cMgr->GetJoinChannel(channelname, channel_id))
             chn->Join(_player->GetGUID(), pass.c_str());
@@ -52,9 +55,9 @@ void WorldSession::HandleChannelLeave(WorldPacket& recvPacket)
     //recvPacket.hexlike();
     CHECK_PACKET_SIZE(recvPacket, 4+1);
 
-    uint32 unk;
+    uint32 channel_id;
     std::string channelname;
-    recvPacket >> unk;                                      // channel id?
+    recvPacket >> channel_id;
     recvPacket >> channelname;
 
     if (channelname.empty())
@@ -240,10 +243,22 @@ void WorldSession::HandleChannelInvite(WorldPacket& recvPacket)
 
     if (!normalizePlayerName(otp))
         return;
-
+    
     if (ChannelMgr* cMgr = channelMgr(_player->GetTeam()))
         if (Channel *chn = cMgr->GetChannel(channelname, _player))
+        {
+            if (!sObjectAccessor.GetPlayerByName(otp) || !sObjectAccessor.GetPlayerByName(otp)->isAcceptWhispers()) // player not found
+                {
+                    WorldPacket data;
+                    data.Initialize(SMSG_CHANNEL_NOTIFY, 1+channelname.size()+1);
+                    data << uint8(0x09); //CHAT_PLAYER_NOT_FOUND_NOTICE
+                    data << channelname;
+                    data << otp;
+                    SendPacket(&data);
+                    return;
+                }
             chn->Invite(_player->GetGUID(), otp.c_str());
+        }
 }
 
 void WorldSession::HandleChannelKick(WorldPacket& recvPacket)

@@ -186,10 +186,15 @@ Guild * ObjectMgr::GetGuildById(const uint32 GuildId) const
 
 Guild * ObjectMgr::GetGuildByName(const std::string& guildname) const
 {
+    std::string search = guildname;
+    std::transform(search.begin(), search.end(), search.begin(), toupper);
     for (GuildMap::const_iterator itr = mGuildMap.begin(); itr != mGuildMap.end(); ++itr)
-        if (itr->second->GetName() == guildname)
+    {
+        std::string gname = itr->second->GetName();
+        std::transform(gname.begin(), gname.end(), gname.begin(), toupper);
+        if (search == gname)
             return itr->second;
-
+    }
     return NULL;
 }
 
@@ -229,12 +234,18 @@ ArenaTeam* ObjectMgr::GetArenaTeamById(const uint32 arenateamid) const
     return NULL;
 }
 
+
 ArenaTeam* ObjectMgr::GetArenaTeamByName(const std::string& arenateamname) const
 {
+    std::string search = arenateamname;
+    std::transform(search.begin(), search.end(), search.begin(), toupper);
     for (ArenaTeamMap::const_iterator itr = mArenaTeamMap.begin(); itr != mArenaTeamMap.end(); ++itr)
-        if (itr->second->GetName() == arenateamname)
+    {
+        std::string teamname = itr->second->GetName();
+        std::transform(teamname.begin(), teamname.end(), teamname.begin(), toupper);
+        if (search == teamname)
             return itr->second;
-
+    }
     return NULL;
 }
 
@@ -6162,8 +6173,13 @@ bool PlayerCondition::Meets(Player const * player) const
             return player->GetQuestRewardStatus(value1);
         case CONDITION_QUESTTAKEN:
         {
-            QuestStatus status = player->GetQuestStatus(value1);
-            return (status == QUEST_STATUS_INCOMPLETE);
+            QuestStatus status1 = player->GetQuestStatus(value1);
+            if (status1 == QUEST_STATUS_INCOMPLETE)
+                return true;
+            if (value2 == 0)
+                return false;
+            QuestStatus status2 = player->GetQuestStatus(value2);
+            return (status2 == QUEST_STATUS_INCOMPLETE);
         }
         case CONDITION_AD_COMMISSION_AURA:
         {
@@ -6285,14 +6301,21 @@ bool PlayerCondition::IsValid(ConditionType condition, uint32 value1, uint32 val
         case CONDITION_QUESTREWARDED:
         case CONDITION_QUESTTAKEN:
         {
-            Quest const *Quest = sObjectMgr.GetQuestTemplate(value1);
-            if (!Quest)
+            Quest const *quest1 = sObjectMgr.GetQuestTemplate(value1);
+            if (!quest1)
             {
                 sLog.outLog(LOG_DB_ERR, "Quest condition specifies non-existing quest (%u), skipped", value1);
                 return false;
             }
-            if (value2)
-                sLog.outLog(LOG_DB_ERR, "Quest condition has useless data in value2 (%u)!", value2);
+            if (!value2)
+                return true;
+
+            Quest const *quest2 = sObjectMgr.GetQuestTemplate(value1);
+            if (!quest2)
+            {
+                sLog.outLog(LOG_DB_ERR, "Quest condition specifies non-existing secondary quest (%u), skipped", value2);
+                return false;
+            }
             break;
         }
         case CONDITION_AD_COMMISSION_AURA:

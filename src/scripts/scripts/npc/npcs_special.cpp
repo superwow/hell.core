@@ -1016,16 +1016,13 @@ CreatureAI* GetAI_npc_tonk_mine(Creature *_Creature)
 
 bool ReceiveEmote_npc_winter_reveler( Player *player, Creature *_Creature, uint32 emote )
 {
-    if (player->HasSpellCooldown(26218))
-        return false;
-
-    if (emote == TEXTEMOTE_KISS)
+    if ((!player->HasAura(26218))&&(emote == TEXTEMOTE_KISS))
     {
-        //_Creature->CastSpell(_Creature, 26218, false);
-        player->CastSpell(player, 26218, false);
-        player->AddSpellCooldown(26218, 0, time(NULL) + 3600);
+        _Creature->CastSpell(player, 26218, false);
+        return true;
     }
-    return true;
+    
+    return false;
 }
 
 /*####
@@ -1652,7 +1649,7 @@ bool GossipSelect_npc_ring_specialist(Player* player, Creature* _Creature, uint3
 
 struct npc_elemental_guardianAI : public ScriptedAI
 {
-    npc_elemental_guardianAI(Creature *c) : ScriptedAI(c) { c->SetReactState(REACT_DEFENSIVE); }
+    npc_elemental_guardianAI(Creature *c) : ScriptedAI(c) { c->SetReactState(REACT_AGGRESSIVE); }
 
     uint32 m_checkTimer;
 
@@ -2875,7 +2872,7 @@ CreatureAI* GetAI_npc_gnomish_flame_turret(Creature *_Creature)
 #define DUMMY_PARK_ON "Start dummy park event"
 #define DUMMY_PARK_OFF "Stop dummy park event"
 #define DUMMY_PARK_OBJECTS 16
-#define DUMMY_PARK_NPCS 6
+#define DUMMY_PARK_NPCS 8
 
 float dummyparkstorage[3] = {-1899, 5607, -33};
 
@@ -2923,7 +2920,9 @@ float dummyparknpclocs[DUMMY_PARK_NPCS][3] ={
     {-1928.70, 5560.42, -12.428},
     {-1913.47, 5560.28, -12.428},
     {-1933.36, 5570.6, -12.427},
-    {-1938.83, 5548.67, -12.427}
+    {-1938.83, 5548.67, -12.427},
+    {-1922.58, 5565.43, -12.427},
+    {-1936.90, 5560.12, -12.427}
 };
 
 uint32 dummyparknpcs[DUMMY_PARK_NPCS][2] ={
@@ -2932,7 +2931,9 @@ uint32 dummyparknpcs[DUMMY_PARK_NPCS][2] ={
     {29437,66702},
     {29461,66703},
     {133929,66704},
-    {60062,66709}
+    {60062,66709},
+    {126618,66712},
+    {126714,66713}
 };
 
 bool GossipHello_npc_dummy_park(Player *player, Creature *creature)
@@ -3021,6 +3022,58 @@ bool GossipSelect_npc_dummy_park(Player *player, Creature *creature, uint32 send
         }
     }
     return true;
+}
+
+struct npc_nearly_dead_combat_dummyAI : public Scripted_NoMovementAI
+{
+    npc_nearly_dead_combat_dummyAI(Creature *c) : Scripted_NoMovementAI(c)
+    {
+    }
+
+    uint64 AttackerGUID;
+    uint32 Check_Timer;
+
+    void Reset()
+    {
+        m_creature->SetHealth(m_creature->GetMaxHealth()/11);
+        m_creature->SetNoCallAssistance(true);
+        m_creature->ApplySpellImmune(0, IMMUNITY_STATE, SPELL_AURA_MOD_STUN, true);
+        AttackerGUID = 0;
+        Check_Timer = 0;
+    }
+
+    void EnterCombat(Unit* who)
+    {
+        AttackerGUID = ((Player*)who)->GetGUID();
+        m_creature->GetUnitStateMgr().PushAction(UNIT_ACTION_STUN, UNIT_ACTION_PRIORITY_END);
+    }
+
+    void DamageTaken(Unit *attacker, uint32 &damage)
+    {
+    }
+
+    void UpdateAI(const uint32 diff)
+    {
+        Player* attacker = Player::GetPlayer(AttackerGUID);
+
+        if (!UpdateVictim())
+            return;
+
+        if (attacker && Check_Timer < diff)
+        {
+            if(m_creature->GetDistance2d(attacker) > 12.0f)
+                EnterEvadeMode();
+
+            Check_Timer = 3000;
+        }
+        else
+            Check_Timer -= diff;
+    }
+};
+
+CreatureAI* GetAI_npc_nearly_dead_combat_dummy(Creature *_Creature)
+{
+    return new npc_nearly_dead_combat_dummyAI (_Creature);
 }
 
 void AddSC_npcs_special()
@@ -3228,5 +3281,10 @@ void AddSC_npcs_special()
     newscript->Name="npc_dummy_park_controller";
     newscript->pGossipHello =  &GossipHello_npc_dummy_park;
     newscript->pGossipSelect = &GossipSelect_npc_dummy_park;
+    newscript->RegisterSelf();
+
+    newscript = new Script;
+    newscript->Name="npc_nearly_dead_combat_dummy";
+    newscript->GetAI = &GetAI_npc_nearly_dead_combat_dummy;
     newscript->RegisterSelf();
 }

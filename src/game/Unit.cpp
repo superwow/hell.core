@@ -56,7 +56,6 @@
 #include "movement/MoveSplineInit.h"
 #include "movement/MoveSpline.h"
 
-
 #include <math.h>
 
 float baseMoveSpeed[MAX_MOVE_TYPE] =
@@ -1101,7 +1100,7 @@ uint32 Unit::DealDamage(DamageLog *damageInfo, DamageEffectType damagetype, cons
                         if (spell->getState() == SPELL_STATE_CASTING)
                         {
                             uint32 channelInterruptFlags = spell->GetSpellInfo()->ChannelInterruptFlags;
-                            if (damagetype != DOT && channelInterruptFlags & CHANNEL_FLAG_DELAY)
+                            if (damagetype != DOT && channelInterruptFlags & CHANNEL_INTERRUPT_FLAG_DELAY)
                                 spell->DelayedChannel();
                         }
                     }
@@ -1838,35 +1837,38 @@ void Unit::CalcAbsorbResist(Unit *pVictim, SpellSchoolMask schoolMask, DamageEff
     if (schoolMask & ~SPELL_SCHOOL_MASK_NORMAL)
     {
         // Get base victim resistance for school
-        float tmpvalue2 = (float)pVictim->GetResistance(GetFirstSchoolInMask(schoolMask));
+        float victimResistance = (float)pVictim->GetResistance(GetFirstSchoolInMask(schoolMask));
         // Ignore resistance by self SPELL_AURA_MOD_TARGET_RESISTANCE aura
         if(GetTypeId() == TYPEID_PLAYER)
-            tmpvalue2 += (float)GetInt32Value(PLAYER_FIELD_MOD_TARGET_RESISTANCE);
+            victimResistance += (float)GetInt32Value(PLAYER_FIELD_MOD_TARGET_RESISTANCE);
         else
-            tmpvalue2 += (float)GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_TARGET_RESISTANCE, schoolMask);
+            victimResistance += (float)GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_TARGET_RESISTANCE, schoolMask);
 
-        if (tmpvalue2 < 0.0f || schoolMask & SPELL_SCHOOL_MASK_HOLY)
-            tmpvalue2 = 0.0f;
+        if (Player* player = ToPlayer())
+            victimResistance -= float(player->GetSpellPenetrationItemMod());
+
+        if (victimResistance < 0.0f || schoolMask & SPELL_SCHOOL_MASK_HOLY)
+            victimResistance = 0.0f;
 
         if (Creature* pCre = pVictim->ToCreature())
         {
             int32 leveldiff = int32(pCre->getLevelForTarget(this)) - int32(getLevelForTarget(pCre));
             if (leveldiff > 0)
-                tmpvalue2 += leveldiff * 5;
+                victimResistance += leveldiff * 5;
         }
 
-        tmpvalue2 *= (float)(0.15f / getLevel());
-        if (tmpvalue2 < 0.0f)
-            tmpvalue2 = 0.0f;
-        if (tmpvalue2 > 0.75f)
-            tmpvalue2 = 0.75f;
+        victimResistance *= (float)(0.15f / getLevel());
+        if (victimResistance < 0.0f)
+            victimResistance = 0.0f;
+        if (victimResistance > 0.75f)
+            victimResistance = 0.75f;
         uint32 ran = urand(0, 10000);
         uint32 faq[4] = {24,6,4,6};
         uint8 m = 0;
         float Binom = 0.0f;
         for (uint8 i = 0; i < 4; i++)
         {
-            Binom += 240000 *(powf(tmpvalue2, i) * powf((1-tmpvalue2), (4-i)))/faq[i];
+            Binom += 240000 *(powf(victimResistance, i) * powf((1-victimResistance), (4-i)))/faq[i];
             if (ran > Binom)
                 ++m;
             else
@@ -2256,10 +2258,6 @@ void Unit::RollMeleeHit(MeleeDamageLog *damageInfo) const
 
     // stunned target cannot dodge and this is check in GetUnitDodgeChance() (returned 0 in this case)
     float dodge_chance = damageInfo->target->GetUnitDodgeChance();
-    if(HasAuraType(SPELL_AURA_MOD_ENEMY_DODGE))
-        dodge_chance += GetTotalAuraModifier(SPELL_AURA_MOD_ENEMY_DODGE);
-    if(dodge_chance < 0)
-        dodge_chance = 0;
     float block_chance = damageInfo->target->GetUnitBlockChance();
     float parry_chance = damageInfo->target->GetUnitParryChance();
 
@@ -2362,6 +2360,8 @@ void Unit::RollMeleeHit(MeleeDamageLog *damageInfo, int32 crit_chance, int32 mis
         dodge_chance -= expertise_reduction + skillBonus;
         // Modify dodge chance by attacker SPELL_AURA_MOD_COMBAT_RESULT_CHANCE
         dodge_chance += GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_COMBAT_RESULT_CHANCE, VICTIMSTATE_DODGE)*100;
+        // Modify dodge chance by SPELL_AURA_MOD_ENEMY_DODGE
+        dodge_chance += GetTotalAuraModifier(SPELL_AURA_MOD_ENEMY_DODGE) * 100;
         if (dodge_chance > 0)
         {
             SendCombatStats("RollMeleeHit: dodge chance = %d", pVictim, dodge_chance);
@@ -2994,9 +2994,9 @@ SpellMissInfo Unit::SpellHitResult(Unit *pVictim, SpellEntry const *spell, bool 
     if (pVictim->IsImmunedToSpell(spell,true))
         return SPELL_MISS_IMMUNE;
 
-    // All positive spells can`t miss
+    // All positive spells + dispels on friendly target can`t miss
     // TODO: client not show miss log for this spells - so need find info for this in dbc and use it!
-    if (SpellMgr::IsPositiveSpell(spell->Id)
+    if ((SpellMgr::IsPositiveSpell(spell->Id) || SpellMgr::IsDispel(spell))
         &&(!IsHostileTo(pVictim)))  //prevent from affecting enemy by "positive" spell
         return SPELL_MISS_NONE;
 
@@ -9050,9 +9050,6 @@ void Unit::MeleeDamageBonus(Unit *pVictim, uint32 *pdamage,WeaponAttackType attT
         AuraList const& mModDamagePercentDone = GetAurasByType(SPELL_AURA_MOD_DAMAGE_PERCENT_DONE);
         for (AuraList::const_iterator i = mModDamagePercentDone.begin(); i != mModDamagePercentDone.end(); ++i)
         {
-            if ((*i)->GetModifier()->m_miscvalue & SPELL_SCHOOL_MASK_NORMAL) // If modifier affects physical already - it shouldn't affect the spell second time.
-                continue;
-            else
             switch ((*i)->GetId())
             {
                 case 6057:  // M Wand Spec 1
@@ -9522,7 +9519,9 @@ bool Unit::isAttackableByAOE() const
 
 int32 Unit::ModifyHealth(int32 dVal)
 {
-    if (GetTypeId() == TYPEID_UNIT && (((Creature *)this)->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_DAMAGE_TAKEN))
+    if (dVal < 0 && GetTypeId() == TYPEID_UNIT && (((Creature *)this)->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_DAMAGE_TAKEN))
+        return 0;
+    if (dVal > 0 && GetTypeId() == TYPEID_UNIT && (((Creature *)this)->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_HEALING_TAKEN))
         return 0;
 
     int32 gain = 0;

@@ -479,7 +479,6 @@ void Spell::FillTargetMap()
                     }
                     break;
                 }
-                case SPELL_EFFECT_RESURRECT:
                 case SPELL_EFFECT_CREATE_ITEM:
                 case SPELL_EFFECT_TRIGGER_SPELL:
                 case SPELL_EFFECT_SKILL_STEP:
@@ -496,24 +495,20 @@ void Spell::FillTargetMap()
                     if (m_targets.getUnitTarget())
                         AddUnitTarget(m_targets.getUnitTarget(), i);
                     break;
+                case SPELL_EFFECT_RESURRECT:
                 case SPELL_EFFECT_RESURRECT_NEW:
                     if (m_targets.getUnitTarget())
                         AddUnitTarget(m_targets.getUnitTarget(), i);
                     if (m_targets.getCorpseTargetGUID())
-                    {
-                        Corpse *corpse = ObjectAccessor::GetCorpse(*m_caster,m_targets.getCorpseTargetGUID());
-                        if (corpse)
-                        {
-                            Player* owner = ObjectAccessor::FindPlayer(corpse->GetOwnerGUID());
-                            if (owner)
+                        if (Corpse *corpse = ObjectAccessor::GetCorpse(*m_caster,m_targets.getCorpseTargetGUID()))
+                            if (Player* owner = ObjectAccessor::FindPlayer(corpse->GetOwnerGUID()))
                                 AddUnitTarget(owner, i);
-                        }
-                    }
                     break;
                 case SPELL_EFFECT_SUMMON_CHANGE_ITEM:
                 case SPELL_EFFECT_ADD_FARSIGHT:
                 case SPELL_EFFECT_STUCK:
                 case SPELL_EFFECT_DESTROY_ALL_TOTEMS:
+                case SPELL_EFFECT_FRIEND_SUMMON:
                     AddUnitTarget(m_caster, i);
                     break;
                 case SPELL_EFFECT_LEARN_PET_SPELL:
@@ -546,19 +541,11 @@ void Spell::FillTargetMap()
                     break;
                 case SPELL_EFFECT_SKIN_PLAYER_CORPSE:
                     if (m_targets.getUnitTarget())
-                    {
                         AddUnitTarget(m_targets.getUnitTarget(), i);
-                    }
                     else if (m_targets.getCorpseTargetGUID())
-                    {
-                        Corpse *corpse = ObjectAccessor::GetCorpse(*m_caster,m_targets.getCorpseTargetGUID());
-                        if (corpse)
-                        {
-                            Player* owner = ObjectAccessor::FindPlayer(corpse->GetOwnerGUID());
-                            if (owner)
+                        if (Corpse *corpse = ObjectAccessor::GetCorpse(*m_caster,m_targets.getCorpseTargetGUID()))
+                            if (Player* owner = ObjectAccessor::FindPlayer(corpse->GetOwnerGUID()))
                                 AddUnitTarget(owner, i);
-                        }
-                    }
                     break;
                 default:
                     break;
@@ -2320,7 +2307,7 @@ void Spell::prepare(SpellCastTargets * targets, Aura* triggeredByAura)
             m_casttime = 0;
     }
 
-    if (GetCastTime() && !SpellMgr::IsChanneledSpell(GetSpellInfo()) ? GetSpellInfo()->InterruptFlags & SPELL_INTERRUPT_FLAG_MOVEMENT : GetSpellInfo()->ChannelInterruptFlags & CHANNEL_FLAG_MOVEMENT)
+    if (GetCastTime() && !SpellMgr::IsChanneledSpell(GetSpellInfo()) ? GetSpellInfo()->InterruptFlags & SPELL_INTERRUPT_FLAG_MOVEMENT : GetSpellInfo()->ChannelInterruptFlags & CHANNEL_INTERRUPT_FLAG_MOVEMENT)
     {
         // controlled state is delivered from idle movement so should be sufficient
         m_caster->addUnitState(UNIT_STAT_CASTING_NOT_MOVE);
@@ -3332,13 +3319,6 @@ void Spell::SendLogExecute()
                         data << uint8(0);
                     data << uint32(m_caster->m_extraAttacks);
                     break;
-                case SPELL_EFFECT_INTERRUPT_CAST:
-                    if (Unit *unit = m_targets.getUnitTarget())
-                        data << unit->GetPackGUID();
-                    else
-                        data << uint8(0);
-                    data << uint32(0);                      // spellid
-                    break;
                 case SPELL_EFFECT_DURABILITY_DAMAGE:
                     if (Unit *unit = m_targets.getUnitTarget())
                         data << unit->GetPackGUID();
@@ -4202,10 +4182,12 @@ SpellCastResult Spell::CheckCast(bool strict)
                     float angle = m_caster->GetAngle(target) - m_caster->GetOrientation() - M_PI;
                     m_caster->GetValidPointInAngle(dest, 2.0f, angle, false);
                     _path.setPathLengthLimit(SpellMgr::GetSpellMaxRange(GetSpellInfo()) * 1.5f);
-                    _path.calculate(dest.x, dest.y, dest.z);
+                    bool result = _path.calculate(dest.x, dest.y, dest.z);
 
                     if (_path.getPathType() & PATHFIND_SHORT)
                         return SPELL_FAILED_OUT_OF_RANGE;
+                    else if (!result)
+                        return SPELL_FAILED_NOPATH;
                 }
                 break;
             }
@@ -4371,7 +4353,7 @@ SpellCastResult Spell::CheckCast(bool strict)
                     return SPELL_FAILED_BAD_TARGETS;
 
                 Player* target = m_targets.getUnitTarget()->ToPlayer();
-                if (!target || m_caster == target || !target->IsInSameRaidWith(pCaster))
+                if (!target || m_caster == target || (!target->IsInSameRaidWith(pCaster) && m_spellInfo->Id != 48955))
                     return SPELL_FAILED_BAD_TARGETS;
 
                 if (pCaster->GetBattleGround())
@@ -4391,6 +4373,21 @@ SpellCastResult Spell::CheckCast(bool strict)
                     if (!target->CanBeSummonedBy(pCaster))
                         return SPELL_FAILED_TARGET_LOCKED_TO_RAID_INSTANCE;
                 }
+                break;
+            }
+            case SPELL_EFFECT_FRIEND_SUMMON:
+            {
+                if (m_caster->GetTypeId() != TYPEID_PLAYER)
+                    return SPELL_FAILED_BAD_TARGETS;
+
+                if (((Player*) m_caster)->GetSelection() == NULL)
+                    return SPELL_FAILED_BAD_TARGETS;
+
+                Player* target = sObjectMgr.GetPlayer(((Player*) m_caster)->GetSelection());
+
+                if (!target || !target->IsReferAFriendLinked(((Player*) m_caster)))
+                    return SPELL_FAILED_BAD_TARGETS;
+
                 break;
             }
             case SPELL_EFFECT_LEAP:
@@ -5508,12 +5505,14 @@ bool Spell::CheckTarget(Unit* target, uint32 eff)
     //Check targets for LOS visibility (except spells without range limitations)
     switch (GetSpellInfo()->Effect[eff])
     {
+        case SPELL_EFFECT_FRIEND_SUMMON:
         case SPELL_EFFECT_SUMMON_PLAYER:                    // from anywhere
             break;
         case SPELL_EFFECT_DUMMY:
             if (GetSpellInfo()->Id!=20577)                      // Cannibalize
                 break;
             //fall through
+        case SPELL_EFFECT_RESURRECT:
         case SPELL_EFFECT_RESURRECT_NEW:
             // player far away, maybe his corpse near?
             if (target!=m_caster && !SpellMgr::SpellIgnoreLOS(GetSpellInfo(), eff) && !target->IsWithinLOSInMap(m_caster))

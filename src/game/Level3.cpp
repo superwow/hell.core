@@ -810,7 +810,7 @@ bool ChatHandler::HandleReloadAuctionsCommand(const char* args)
     return true;
 }
 
-bool ChatHandler::HandleAccountSetGmLevelCommand(const char* args)
+bool ChatHandler::HandleAccountSetPermissionsCommand(const char* args)
 {
     if (!*args)
         return false;
@@ -847,16 +847,15 @@ bool ChatHandler::HandleAccountSetGmLevelCommand(const char* args)
         }
 
         // Decide which string to show
-        if (m_session->GetPlayer()!=targetPlayer)
-        {
+        if (m_session->GetPlayer() != targetPlayer)
             PSendSysMessage(LANG_YOU_CHANGE_SECURITY, targetAccountName.c_str(), gm);
-        }else{
+        else
             PSendSysMessage(LANG_YOURS_SECURITY_CHANGED, m_session->GetPlayer()->GetName(), gm);
-        }
 
-        AccountsDatabase.PExecute("UPDATE account SET gmlevel = '%d' WHERE id = '%u'", gm, targetAccountId);
+        AccountsDatabase.PExecute("UPDATE account_permissions SET permission_mask = '%u' WHERE account_id = '%u' AND realm_id = '%u'", gm, targetAccountId, realmID);
         return true;
-    }else
+    }
+    else
     {
         // Check for second parameter
         if (!arg2)
@@ -866,7 +865,7 @@ bool ChatHandler::HandleAccountSetGmLevelCommand(const char* args)
         targetAccountName = arg1;
         if (!AccountMgr::normilizeString(targetAccountName))
         {
-            PSendSysMessage(LANG_ACCOUNT_NOT_EXIST,targetAccountName.c_str());
+            PSendSysMessage(LANG_ACCOUNT_NOT_EXIST, targetAccountName.c_str());
             SetSentErrorMessage(true);
             return false;
         }
@@ -3831,7 +3830,7 @@ bool ChatHandler::HandleNpcInfoCommand(const char* /*args*/)
 
     PSendSysMessage("Combat reach: %f, BoundingRadius: %f", target->GetFloatValue(UNIT_FIELD_COMBATREACH), target->GetFloatValue(UNIT_FIELD_BOUNDINGRADIUS));
     PSendSysMessage("Determinative Size: %f, CollisionWidth: %f, Scale DB: %f, Scale DBC: %f", target->GetDeterminativeSize(), modelInfo->CollisionWidth, cInfo->scale, displayInfo->scale);
-    PSendSysMessage("Active flags: %x", target->isActiveObject());
+    PSendSysMessage("Active flags: %x; Extra flags: 0x%08X", target->isActiveObject(),cInfo->flags_extra);
 
     return true;
 }
@@ -5361,7 +5360,7 @@ bool ChatHandler::HandleBanInfoCharacterCommand(const char* args)
 
 bool ChatHandler::HandleBanInfoHelper(uint32 accountid, char const* accountname)
 {
-    QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT FROM_UNIXTIME(punishment_date), expiration_date-punishment_date, expiration_date, reason, punished_by "
+    QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT FROM_UNIXTIME(punishment_date), expiration_date-punishment_date, expiration_date, reason, punished_by, active "
                                                         "FROM account_punishment "
                                                         "WHERE punishment_type_id = '%u' AND account_id = '%u' "
                                                         "ORDER BY punishment_date ASC", PUNISHMENT_BAN, accountid);
@@ -5382,7 +5381,7 @@ bool ChatHandler::HandleBanInfoHelper(uint32 accountid, char const* accountname)
         bool active = false;
         bool permanent = (banLength == 0);
 
-        if (permanent || unbandate >= time(NULL))
+        if ((permanent || unbandate >= time(NULL)) && fields[5].GetBool())
             active = true;
 
         std::string bantime = permanent ? GetTrinityString(LANG_BANINFO_INFINITE) : secsToTimeString(banLength, true);
@@ -5479,11 +5478,12 @@ bool ChatHandler::HandleBanListAccountCommand(const char* args)
     if (filter.empty())
         result = AccountsDatabase.PQuery("SELECT account.account_id, username "
                                         "FROM account JOIN account_punishment ON account.account_id = account_punishment.account_id "
-                                        "WHERE punishment_type_id = '%u' AND expiration_date > UNIX_TIMESTAMP() GROUP BY account.account_id", PUNISHMENT_BAN);
+                                        "WHERE punishment_type_id = '%u' AND active = 1 GROUP BY account.account_id", PUNISHMENT_BAN);
     else
         result = AccountsDatabase.PQuery("SELECT account.account_id, username "
                                         "FROM account JOIN account_punishment ON account.account_id = account_punishment.account_id "
-                                        "WHERE punishment_type_id = '%u' AND username LIKE '%%%s%%' GROUP BY account.account_id", PUNISHMENT_BAN, filter.c_str());
+                                        "WHERE punishment_type_id = '%u' AND active = 1 AND "
+                                        "username LIKE '%%%s%%' GROUP BY account.account_id", PUNISHMENT_BAN, filter.c_str());
 
 
     if (!result)
@@ -6412,7 +6412,7 @@ bool ChatHandler::HandleInstanceResetEncountersCommand(const char* args)
 bool ChatHandler::HandleGMListFullCommand(const char* /*args*/)
 {
     ///- Get the accounts with GM Level >0
-    QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT username, permission_mask FROM account JOIN account_permission WHERE permission_mask & '%u' AND realm_id = '%u'", PERM_GMT, realmID);
+    QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT username, permission_mask FROM account JOIN account_permission WHERE permission_mask & '%u' AND realm_id = '%u'", PERM_GMT_DEV, realmID);
     if (result)
     {
         SendSysMessage(LANG_GMLIST);
@@ -7398,4 +7398,79 @@ bool ChatHandler::HandleMmapTestArea(const char* args)
     }
 
     return true;
+}
+
+// Set friends for account
+bool ChatHandler::HandleAccountFriendAddCommand(const char* args)
+{
+    ///- Get the command line arguments
+    char* arg1 = strtok((char*) args, " ");
+    if (arg1 == nullptr || arg1 == "")
+        return false;
+        
+    uint32 targetAccountId = atoi(arg1);
+    if (!targetAccountId)
+        return false;
+
+    uint32 friendAccountId = atoi(strtok(NULL, " "));
+
+    if (!friendAccountId)
+        return false;
+
+    AccountOpResult result = AccountMgr::AddRAFLink(targetAccountId, friendAccountId);
+
+    switch (result)
+    {
+        case AOR_OK:
+            SendSysMessage(LANG_COMMAND_FRIEND);
+            break;
+        default:
+            SendSysMessage(LANG_COMMAND_FRIEND_ERROR);
+            SetSentErrorMessage(true);
+            return false;
+    }
+
+    return true;
+}
+
+// Delete friends for account
+bool ChatHandler::HandleAccountFriendDeleteCommand(const char* args)
+{
+    ///- Get the command line arguments
+    char* arg1 = strtok((char*) args, " ");
+    if (arg1 == nullptr || arg1 == "")
+        return false;
+        
+    uint32 targetAccountId = atoi(arg1);
+    if (!targetAccountId)
+        return false;
+
+    char* arg2 = strtok(NULL, " ");
+    if (arg2 == nullptr || arg2 == "")
+        return false;
+        
+    uint32 friendAccountId = atoi(arg2);
+    if (!friendAccountId)
+        return false;
+
+    AccountOpResult result = AccountMgr::DeleteRAFLink(targetAccountId, friendAccountId);
+
+    switch (result)
+    {
+        case AOR_OK:
+            SendSysMessage(LANG_COMMAND_FRIEND);
+            break;
+        default:
+            SendSysMessage(LANG_COMMAND_FRIEND_ERROR);
+            SetSentErrorMessage(true);
+            return false;
+    }
+
+    return true;
+}
+
+// List friends for account
+bool ChatHandler::HandleAccountFriendListCommand(const char* args)
+{
+    return false;
 }
