@@ -186,7 +186,7 @@ enum AccountPermissionMasks
     PERM_CONSOLE        = 0x800000,
 
     PERM_GMT            = PERM_GM_TRIAL | PERM_GM_HELPER | PERM_GM_HEAD,
-    PERM_ADM            = PERM_GMT | PERM_ADM_NORM | PERM_ADM_HEAD,
+    PERM_ADM            = PERM_ADM_NORM | PERM_ADM_HEAD,
     PERM_HIGH_GMT       = PERM_ADM | PERM_GM_HEAD,
     PERM_GMT_DEV        = PERM_GMT | PERM_DEVELOPER,
     PERM_HIGH_DEV       = PERM_HIGH_GMT | PERM_DEVELOPER,
@@ -208,9 +208,10 @@ enum PunishmentTypes
 
 enum ClientOSVersion
 {
-    CLIENT_OS_UNKNOWN   = 0,
-    CLIENT_OS_WIN       = 1,
-    CLIENT_OS_OSX       = 2
+    CLIENT_OS_UNKNOWN   = 0,        // unknown system client
+    CLIENT_OS_WIN       = 1,        // Windows client
+    CLIENT_OS_OSX       = 2,        // OSX client
+    CLIENT_OS_CHAT      = 3,        // WoW Chat client
 };
 
 // Used in mangosd/realmd

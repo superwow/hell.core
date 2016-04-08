@@ -187,7 +187,7 @@ AuthSocket::AuthSocket()
     g.SetDword(7);
     _authed = false;
 
-    accountPermissionMask = PERM_PLAYER;
+    accountPermissionMask_ = PERM_PLAYER;
 
     _build = 0;
     patch_ = ACE_INVALID_HANDLE;
@@ -209,7 +209,6 @@ void AuthSocket::OnAccept()
 /// Read the packet from the client
 void AuthSocket::OnRead()
 {
-    printf("%s\n", __FUNCTION__);
     uint8 _cmd;
     while (1)
     {
@@ -251,7 +250,6 @@ void AuthSocket::OnRead()
 /// Make the SRP6 calculation from hash in dB
 void AuthSocket::_SetVSFields(const std::string& rI)
 {
-    printf("%s\n", __FUNCTION__);
     s.SetRand(s_BYTE_SIZE * 8);
 
     BigNumber I;
@@ -285,7 +283,6 @@ void AuthSocket::_SetVSFields(const std::string& rI)
 
 void AuthSocket::SendProof(Sha1Hash sha)
 {
-    printf("%s\n", __FUNCTION__);
     switch(_build)
     {
         case 5875:                                          // 1.12.1
@@ -329,7 +326,6 @@ PatternList AuthSocket::pattern_banned = PatternList();
 /// Logon Challenge command handler
 bool AuthSocket::_HandleLogonChallenge()
 {
-    printf("%s\n", __FUNCTION__);
     DEBUG_LOG("Entering _HandleLogonChallenge");
     if (recv_len() < sizeof(sAuthLogonChallenge_C))
         return false;
@@ -367,20 +363,24 @@ bool AuthSocket::_HandleLogonChallenge()
     EndianConvert(ch->timezone_bias);
     EndianConvert(*((uint32*)(&ch->ip[0])));
 
-    if (ch->os[3]) operatingSystem.push_back(ch->os[3]);
-    if (ch->os[2]) operatingSystem.push_back(ch->os[2]);
-    if (ch->os[1]) operatingSystem.push_back(ch->os[1]);
-    if (ch->os[0]) operatingSystem.push_back(ch->os[0]);
-
     std::stringstream tmpLocalIp;
     tmpLocalIp << (uint32)ch->ip[0] << "." << (uint32)ch->ip[1] << "." << (uint32)ch->ip[2] << "." << (uint32)ch->ip[3];
 
-    localIp = tmpLocalIp.str();
+    localIp_ = tmpLocalIp.str();
 
     ByteBuffer pkt;
 
     _login = (const char*)ch->I;
     _build = ch->build;
+    operatingSystem_ = (const char*)ch->os;
+
+    // Restore string order as its byte order is reversed
+    std::reverse(operatingSystem_.begin(), operatingSystem_.end());
+
+    if (operatingSystem_.size() > 4 || (operatingSystem_ != "Win" && operatingSystem_ != "OSX" && (sRealmList.ChatboxOsName == "" || operatingSystem_ != sRealmList.ChatboxOsName))){
+        sLog.outLog(LOG_WARDEN, "Client %s got unsupported operating system (%s)", _login.c_str(), operatingSystem_.c_str());
+        return false;
+    }
 
     ///- Normalize account name
     //utf8ToUpperOnlyLatin(_login); -- client already send account in expected form
@@ -398,7 +398,7 @@ bool AuthSocket::_HandleLogonChallenge()
 #ifdef REGEX_NAMESPACE
     for (PatternList::const_iterator i = pattern_banned.begin(); i != pattern_banned.end(); ++i)
     {
-        if (REGEX_NAMESPACE::regex_match(address.c_str(), i->first) && REGEX_NAMESPACE::regex_match(localIp.c_str(), i->second))
+        if (REGEX_NAMESPACE::regex_match(address.c_str(), i->first) && REGEX_NAMESPACE::regex_match(localIp_.c_str(), i->second))
         {
             pkt<< (uint8) WOW_FAIL_UNKNOWN_ACCOUNT;
             send((char const*)pkt.contents(), pkt.size());
@@ -413,8 +413,6 @@ bool AuthSocket::_HandleLogonChallenge()
     AccountsDatabase.escape_string(address);
     QueryResultAutoPtr result = AccountsDatabase.PQuery("SELECT * FROM ip_banned WHERE ip = '%s'", address.c_str());
 
-    printf("%s: 1\n", __FUNCTION__);
-
     if (result) // ip banned
     {
         sLog.outBasic("[AuthChallenge] Banned ip %s tries to login!", get_remote_address().c_str());
@@ -423,13 +421,11 @@ bool AuthSocket::_HandleLogonChallenge()
         return true;
     }
 
-    printf("%s: 2\n", __FUNCTION__);
     ///- Get the account details from the account table
     // No SQL injection (escaped user name)
 
-    result = AccountsDatabase.PQuery("SELECT pass_hash, account.account_id, account_state_id, last_ip, permission_mask, v, s, email "
+    result = AccountsDatabase.PQuery("SELECT pass_hash, account.account_id, account_state_id, last_ip, permission_mask, email "
                                      "FROM account JOIN account_permissions ON account.account_id = account_permissions.account_id "
-                                     "    JOIN account_session ON account.account_id = account_session.account_id "
                                      "WHERE username = '%s'", _safelogin.c_str());
 
     if (!result)    // account not exists
@@ -438,7 +434,6 @@ bool AuthSocket::_HandleLogonChallenge()
         send((char const*)pkt.contents(), pkt.size());
         return true;
     }
-    printf("%s: 3\n", __FUNCTION__);
 
     Field * fields = result->Fetch();
 
@@ -452,7 +447,7 @@ bool AuthSocket::_HandleLogonChallenge()
             if (strcmp(fields[3].GetString(), get_remote_address().c_str()))
             {
                 DEBUG_LOG("[AuthChallenge] Account IP differs");
-                pkt << uint8(WOW_FAIL_SUSPENDED);
+                    pkt << (uint8) WOW_FAIL_LOCKED_ENFORCED;
                 send((char const*)pkt.contents(), pkt.size());
                 return true;
             }
@@ -472,7 +467,6 @@ bool AuthSocket::_HandleLogonChallenge()
             DEBUG_LOG("[AuthChallenge] Account '%s' is not locked to ip or frozen", _login.c_str());
             break;
     }
-    printf("%s: 4\n", __FUNCTION__);
 
     ///- If the account is banned, reject the logon attempt
     QueryResultAutoPtr  banresult = AccountsDatabase.PQuery("SELECT punishment_date, expiration_date "
@@ -495,7 +489,6 @@ bool AuthSocket::_HandleLogonChallenge()
         send((char const*)pkt.contents(), pkt.size());
         return true;
     }
-    printf("%s: 5\n", __FUNCTION__);
 
     QueryResultAutoPtr  emailbanresult = AccountsDatabase.PQuery("SELECT email FROM email_banned WHERE email = '%s'", (*result)[7].GetString());
     if (emailbanresult)
@@ -506,26 +499,11 @@ bool AuthSocket::_HandleLogonChallenge()
         send((char const*)pkt.contents(), pkt.size());
         return true;
     }
-    printf("%s: 6\n", __FUNCTION__);
 
     ///- Get the password from the account table, upper it, and make the SRP6 calculation
     std::string rI = fields[0].GetCppString();
 
-    ///- Don't calculate (v, s) if there are already some in the database
-    std::string databaseV = fields[5].GetCppString();
-    std::string databaseS = fields[6].GetCppString();
-
-    DEBUG_LOG("database authentication values: v='%s' s='%s'", databaseV.c_str(), databaseS.c_str());
-
-    // multiply with 2, bytes are stored as hexstring
-    if (databaseV.size() != s_BYTE_SIZE*2 || databaseS.size() != s_BYTE_SIZE*2)
-        _SetVSFields(rI);
-    else
-    {
-        s.SetHexStr(databaseS.c_str());
-        v.SetHexStr(databaseV.c_str());
-    }
-    printf("%s: 7\n", __FUNCTION__);
+    _SetVSFields(rI);
 
     b.SetRand(19 * 8);
     BigNumber gmod = g.ModExp(b, N);
@@ -568,7 +546,7 @@ bool AuthSocket::_HandleLogonChallenge()
     if (securityFlags & 0x04)                // Security token input
         pkt << uint8(1);
 
-    accountPermissionMask = fields[4].GetUInt64();
+    accountPermissionMask_ = fields[4].GetUInt64();
 
     _localizationName.resize(4);
     for (int i = 0; i < 4; ++i)
@@ -583,7 +561,6 @@ bool AuthSocket::_HandleLogonChallenge()
 /// Logon Proof command handler
 bool AuthSocket::_HandleLogonProof()
 {
-    printf("%s\n", __FUNCTION__);
     DEBUG_LOG("Entering _HandleLogonProof");
     ///- Read the packet
     sAuthLogonProof_C lp;
@@ -734,15 +711,18 @@ bool AuthSocket::_HandleLogonProof()
 
         uint8 OS;
 
-        if (!strcmp(operatingSystem.c_str(), "Win"))
+        if (!strcmp(operatingSystem_.c_str(), "Win"))
             OS = CLIENT_OS_WIN;
-        else if (!strcmp(operatingSystem.c_str(), "OSX"))
+        else if (!strcmp(operatingSystem_.c_str(), "OSX"))
             OS = CLIENT_OS_OSX;
+        else if (!strcmp(operatingSystem_.c_str(), "CHA") ||
+                 !strcmp(operatingSystem_.c_str(), "CHAT"))
+            OS = CLIENT_OS_CHAT;
         else
         {
             OS = CLIENT_OS_UNKNOWN;
-            AccountsDatabase.escape_string(operatingSystem);
-            sLog.outLog(LOG_WARDEN, "Client %s got unsupported operating system (%s)", _safelogin.c_str(), operatingSystem.c_str());
+            AccountsDatabase.escape_string(operatingSystem_);
+            sLog.outLog(LOG_WARDEN, "Client %s got unsupported operating system (%s)", _safelogin.c_str(), operatingSystem_.c_str());
         }
 
         ///- Update the sessionkey, last_ip, last login time and reset number of failed logins in the account table for this account
@@ -776,7 +756,7 @@ bool AuthSocket::_HandleLogonProof()
         SqlStatement stmt = AccountsDatabase.CreateStatement(updateAccount, "UPDATE account SET last_ip = ?, last_local_ip = ?, last_login = UNIX_TIMESTAMP(), locale_id = ?, failed_logins = 0, client_os_version_id = ? WHERE account_id = ?");
         std::string tmpIp = get_remote_address();
         stmt.addString(tmpIp.c_str());
-        stmt.addString(localIp.c_str());
+        stmt.addString(localIp_.c_str());
         stmt.addUInt8(uint8(GetLocaleByName(_localizationName)));
         stmt.addUInt8(OS);
         stmt.addUInt32(accId);
@@ -1039,7 +1019,7 @@ void AuthSocket::LoadRealmlist(ByteBuffer &pkt, uint32 acctid)
                 }
 
                 // Show offline state for unsupported client builds and locked realms (1.x clients not support locked state show)
-                if (!ok_build || !(i->second.requiredPermissionMask & accountPermissionMask))
+                if (!ok_build || !(i->second.requiredPermissionMask & accountPermissionMask_))
                     realmflags = RealmFlags(realmflags | REALM_FLAG_OFFLINE);
 
                 pkt << uint32(i->second.icon);              // realm type
@@ -1087,7 +1067,7 @@ void AuthSocket::LoadRealmlist(ByteBuffer &pkt, uint32 acctid)
                 if (!buildInfo)
                     buildInfo = &i->second.realmBuildInfo;
 
-                uint8 lock = (i->second.requiredPermissionMask & accountPermissionMask) ? 0 : 1;
+                uint8 lock = (i->second.requiredPermissionMask & accountPermissionMask_) ? 0 : 1;
 
                 RealmFlags realmFlags = i->second.realmflags;
 

@@ -13,7 +13,7 @@
 #define DATA_EREDAR_TWINS_EVENT     5
 #define DATA_MURU_EVENT             6
 #define DATA_KILJAEDEN_EVENT        7
-#define DATA_TRASH_GAUNTLET_EVENT	8
+#define DATA_TRASH_GAUNTLET_EVENT   8
 
 /*** Creatures ***/
 #define DATA_KALECGOS_DRAGON        9
@@ -44,6 +44,9 @@
 #define DATA_KALECGOS_PHASE         29
 #define DATA_BRUTALLUS_TRIGGER      30
 #define DATA_EREDAR_TWINS_INTRO     31
+
+#define DATA_MURU_TESTING_COUNTER   50
+#define DATA_MURU_TESTING           51
 
 #define SISTER_DEATH                1
 

@@ -46,6 +46,7 @@ Guild::Guild()
     CreatedYear = 0;
     CreatedMonth = 0;
     CreatedDay = 0;
+    m_guildFlags = 0;
 }
 
 Guild::~Guild()
@@ -565,7 +566,7 @@ void Guild::SetOFFNOTE(uint64 guid,std::string offnote)
 
 void Guild::BroadcastToGuild(WorldSession *session, const std::string& msg, uint32 language)
 {
-    if (session && (session->GetPermissions() & PERM_GMT || (session->GetPlayer() && HasRankRight(session->GetPlayer()->GetRank(),GR_RIGHT_GCHATSPEAK))))
+    if (session && (session->HasPermissions(PERM_GMT) || (session->GetPlayer() && HasRankRight(session->GetPlayer()->GetRank(), GR_RIGHT_GCHATSPEAK))))
     {
         WorldPacket data;
         ChatHandler(session).FillMessageData(&data, CHAT_MSG_GUILD, language, 0, msg.c_str());
@@ -1916,7 +1917,7 @@ uint8 Guild::_CanStoreItem_InSpecificSlot(uint8 tab, uint8 slot, GuildItemPosCou
 
 uint8 Guild::_CanStoreItem_InTab(uint8 tab, GuildItemPosCountVec &dest, uint32& count, bool merge, Item* pSrcItem, uint8 skip_slot) const
 {
-    for (uint32 j = 0; j < GUILD_BANK_MAX_SLOTS; j++)
+    for (uint32 j = 0; j < GUILD_BANK_MAX_SLOTS; ++j)
     {
         // skip specific slot already processed in first called _CanStoreItem_InSpecificSlot
         if (j==skip_slot)
