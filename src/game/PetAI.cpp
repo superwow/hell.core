@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -70,7 +70,9 @@ bool PetAI::targetHasInterruptableAura(Unit *target) const
 bool PetAI::_needToStop() const
 {
     // This is needed for charmed creatures, as once their target was reset other effects can trigger threat
-    if (me->isCharmed() && me->getVictim() == me->GetCharmer())
+    // also pet should stop attacking if his target of his owner is in sanctuary (applies only to player and player-pets targets)
+    if ((me->isCharmed() && me->getVictim() == me->GetCharmer()) ||
+        (me->GetOwner() && me->GetOwner()->isInSanctuary() &&  me->getVictim()->GetCharmerOrOwnerPlayerOrPlayerItself()))
         return true;
 
     return targetHasInterruptableAura(me->getVictim()) || !me->canAttack(me->getVictim());
@@ -84,7 +86,7 @@ void PetAI::_stopAttack()
 
         me->GetMotionMaster()->MoveIdle();
         me->CombatStop();
-        me->getHostilRefManager().deleteReferences();
+        me->getHostileRefManager().deleteReferences();
 
         return;
     }
@@ -201,10 +203,10 @@ void PetAI::AutocastPreparedSpells()
                 me->SendCreateUpdateToPlayer((Player*)m_owner);
         }
 
-        me->AddCreatureSpellCooldown(spell->GetSpellInfo()->Id);
+        me->AddCreatureSpellCooldown(spell->GetSpellEntry()->Id);
 
         if (me->isPet())
-            ((Pet*)me)->CheckLearning(spell->GetSpellInfo()->Id);
+            ((Pet*)me)->CheckLearning(spell->GetSpellEntry()->Id);
 
         spell->prepare(&targets);
     }
@@ -217,11 +219,27 @@ void PetAI::AutocastPreparedSpells()
     }
 }
 
+void PetAI::MovementInform(uint32 type, uint32 data)
+{
+    if (type != CHASE_MOTION_TYPE || data != 2) // target reached only
+        return;
+
+    if (Unit *target = me->getVictim())
+        if (target->getVictim() && target->getVictim() != me && target->isInFront(me, 7.0f, M_PI))
+        {
+            float x, y, z;
+            target->GetGroundPointAroundUnit(x, y, z, target->GetObjectSize(), M_PI);
+
+            if (abs(z - me->GetPositionZ()) <= NOMINAL_MELEE_RANGE) // height difference check
+                me->GetMotionMaster()->MovePoint(0, x, y, z);
+        }
+}
+
 void PetAI::UpdateAI(const uint32 diff)
 {
     m_owner = me->GetCharmerOrOwner();
 
-    // quest support - Razorthorn Ravager, switch to ScriptedAI when charmed and not in combat
+    // quest support - Razorthorn Ravager, switch to CreatureAI when charmed and not in combat
     if (me->GetEntry() == 24922 && me->isCharmed() && !me->isInCombat())
         me->NeedChangeAI = true;
 

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -10,16 +10,16 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
-#ifndef __UNIT_H
-#define __UNIT_H
+#ifndef HELLGROUND_UNIT_H
+#define HELLGROUND_UNIT_H
 
 #include "Common.h"
 #include "Object.h"
@@ -28,7 +28,7 @@
 #include "UpdateFields.h"
 #include "SharedDefines.h"
 #include "ThreatManager.h"
-#include "HostilRefManager.h"
+#include "HostileRefManager.h"
 #include "FollowerReference.h"
 #include "FollowerRefManager.h"
 #include "Utilities/EventProcessor.h"
@@ -882,6 +882,8 @@ class HELLGROUND_IMPORT_EXPORT Unit : public WorldObject
         uint32 m_extraAttacks;
         bool m_canDualWield;
 
+        bool isInSanctuary();
+
         void _addAttacker(Unit *pAttacker)                  // must be called only from Unit::Attack(Unit*)
         {
             AttackerSet::iterator itr = m_attackers.find(pAttacker);
@@ -915,8 +917,8 @@ class HELLGROUND_IMPORT_EXPORT Unit : public WorldObject
         void CombatStop(bool cast = false);
         void CombatStopWithPets(bool cast = false);
         Unit* SelectNearbyTarget(float dist = NOMINAL_MELEE_RANGE, Unit* target = NULL) const;
-        void SendMeleeAttackStop(Unit* victim);
-        void SendMeleeAttackStart(Unit* pVictim);
+        void SendMeleeAttackStop(uint64 victimGUID);
+        void SendMeleeAttackStart(uint64 victimGUID);
 
         void addUnitState(uint32 f) { m_state |= f; }
         bool hasUnitState(const uint32 f) const { return (m_state & f); }
@@ -1292,16 +1294,16 @@ class HELLGROUND_IMPORT_EXPORT Unit : public WorldObject
         float GetNegStat(Stats stat) const { return GetFloatValue(UNIT_FIELD_NEGSTAT0+stat); }
         float GetCreateStat(Stats stat) const { return m_createStats[stat]; }
 
-        void SetCurrentCastedSpell(Spell * pSpell);
+        void SetCurrentCastSpell(Spell * pSpell);
         virtual void ProhibitSpellSchool(SpellSchoolMask /*idSchoolMask*/, uint32 /*unTimeMs*/) { }
 
         void InterruptSpell(uint32 spellType, bool withDelayed = true, bool withInstant = true);
         void FinishSpell(CurrentSpellTypes spellType, bool ok = true);
 
-        // set withDelayed to true to account delayed spells as casted
-        // delayed+channeled spells are always accounted as casted
+        // set withDelayed to true to account delayed spells as cast
+        // delayed+channeled spells are always accounted as cast
         // we can skip channeled or delayed checks using flags
-        bool IsNonMeleeSpellCasted(bool withDelayed, bool skipChanneled = false, bool skipAutorepeat = false) const;
+        bool IsNonMeleeSpellCast(bool withDelayed, bool skipChanneled = false, bool skipAutorepeat = false) const;
 
         // set withDelayed to true to interrupt delayed spells too
         // delayed+channeled spells are always interrupted
@@ -1422,11 +1424,11 @@ class HELLGROUND_IMPORT_EXPORT Unit : public WorldObject
         void TauntApply(Unit* pVictim);
         void TauntFadeOut(Unit *taunter);
 
-        HostilRefManager& getHostilRefManager() { return _hostilRefManager; }
+        HostileRefManager& getHostileRefManager() { return _hostileRefManager; }
         ThreatManager& getThreatManager() { return _threatManager; }
 
-        void addHatedBy(HostilReference* pHostilReference) { getHostilRefManager().insertFirst(pHostilReference); };
-        void removeHatedBy(HostilReference* /*pHostilReference*/) { /* nothing to do yet */ }
+        void addHatedBy(HostileReference* pHostileReference) { getHostileRefManager().insertFirst(pHostileReference); };
+        void removeHatedBy(HostileReference* /*pHostileReference*/) { /* nothing to do yet */ }
 
         Aura* GetAura(uint32 spellId, uint32 effindex);
         AuraMap      & GetAuras()       { return m_Auras; }
@@ -1655,7 +1657,7 @@ class HELLGROUND_IMPORT_EXPORT Unit : public WorldObject
         AuraList m_removedAuras;
 
         AuraList *m_modAuras;
-        AuraList m_scAuras;                        // casted singlecast auras
+        AuraList m_scAuras;                        // cast singlecast auras
         AuraList m_interruptableAuras;
         AuraList m_ccAuras;
         uint32 m_interruptMask;
@@ -1700,7 +1702,7 @@ class HELLGROUND_IMPORT_EXPORT Unit : public WorldObject
         Diminishing m_Diminishing;
 
         // Manage all Units that are threatened by us
-        HostilRefManager _hostilRefManager;
+        HostileRefManager _hostileRefManager;
         ThreatManager _threatManager;
 
         FollowerRefManager m_FollowingRefManager;

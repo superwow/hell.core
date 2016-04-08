@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -10,22 +10,22 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
-#ifndef _UNITEVENTS
-#define _UNITEVENTS
+#ifndef HELLGROUND_UNITEVENTS_H
+#define HELLGROUND_UNITEVENTS_H
 
 #include "Common.h"
 
 class ThreatContainer;
 class ThreatManager;
-class HostilReference;
+class HostileReference;
 
 //==============================================================
 //==============================================================
@@ -87,7 +87,7 @@ class HELLGROUND_IMPORT_EXPORT UnitBaseEvent
 class HELLGROUND_IMPORT_EXPORT ThreatRefStatusChangeEvent : public UnitBaseEvent
 {
     private:
-        HostilReference* iHostilReference;
+        HostileReference* iHostileReference;
         union
         {
             float iFValue;
@@ -96,13 +96,13 @@ class HELLGROUND_IMPORT_EXPORT ThreatRefStatusChangeEvent : public UnitBaseEvent
         };
         ThreatManager* iThreatManager;
     public:
-        ThreatRefStatusChangeEvent(uint32 pType) : UnitBaseEvent(pType) { iHostilReference = NULL; }
+        ThreatRefStatusChangeEvent(uint32 pType) : UnitBaseEvent(pType) { iHostileReference = NULL; }
 
-        ThreatRefStatusChangeEvent(uint32 pType, HostilReference* pHostilReference) : UnitBaseEvent(pType) { iHostilReference = pHostilReference; }
+        ThreatRefStatusChangeEvent(uint32 pType, HostileReference* pHostileReference) : UnitBaseEvent(pType) { iHostileReference = pHostileReference; }
 
-        ThreatRefStatusChangeEvent(uint32 pType, HostilReference* pHostilReference, float pValue) : UnitBaseEvent(pType) { iHostilReference = pHostilReference; iFValue = pValue; }
+        ThreatRefStatusChangeEvent(uint32 pType, HostileReference* pHostileReference, float pValue) : UnitBaseEvent(pType) { iHostileReference = pHostileReference; iFValue = pValue; }
 
-        ThreatRefStatusChangeEvent(uint32 pType, HostilReference* pHostilReference, bool pValue) : UnitBaseEvent(pType) { iHostilReference = pHostilReference; iBValue = pValue; }
+        ThreatRefStatusChangeEvent(uint32 pType, HostileReference* pHostileReference, bool pValue) : UnitBaseEvent(pType) { iHostileReference = pHostileReference; iBValue = pValue; }
 
         int32 getIValue() const { return iIValue; }
 
@@ -112,7 +112,7 @@ class HELLGROUND_IMPORT_EXPORT ThreatRefStatusChangeEvent : public UnitBaseEvent
 
         void setBValue(bool pValue) { iBValue = pValue; }
 
-        HostilReference* getReference() const { return iHostilReference; }
+        HostileReference* getReference() const { return iHostileReference; }
 
         void setThreatManager(ThreatManager* pThreatManager) { iThreatManager = pThreatManager; }
 
@@ -127,7 +127,7 @@ class HELLGROUND_IMPORT_EXPORT ThreatManagerEvent : public ThreatRefStatusChange
         ThreatContainer* iThreatContainer;
     public:
         ThreatManagerEvent(uint32 pType) : ThreatRefStatusChangeEvent(pType) {}
-        ThreatManagerEvent(uint32 pType, HostilReference* pHostilReference) : ThreatRefStatusChangeEvent(pType, pHostilReference) {}
+        ThreatManagerEvent(uint32 pType, HostileReference* pHostileReference) : ThreatRefStatusChangeEvent(pType, pHostileReference) {}
 
         void setThreatContainer(ThreatContainer* pThreatContainer) { iThreatContainer = pThreatContainer; }
 

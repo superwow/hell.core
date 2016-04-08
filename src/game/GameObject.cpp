@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -343,11 +343,16 @@ void GameObject::Update(uint32 update_diff, uint32 p_time)
 
                     ok = p_ok;
                 }
+                else                                                                 // creature spawned traps
+                {
+                    CastSpell((Unit*)NULL, goInfo->trap.spellId);
+                    m_cooldownTime = time(NULL) + goInfo->trap.cooldown;
+                }
 
                 if (ok)
                 {
                     CastSpell(ok, goInfo->trap.spellId);
-                    m_cooldownTime = time(NULL) + 4;        // 4 seconds
+                    m_cooldownTime = time(NULL) + (goInfo->trap.cooldown ? goInfo->trap.cooldown : 4);  // default 4 sec cooldown??
                     SendCustomAnimation();
 
                     if (NeedDespawn)
@@ -469,10 +474,10 @@ void GameObject::Update(uint32 update_diff, uint32 p_time)
                     {
                         if (Unit* caster = Unit::GetUnit(*this, uint64(*i)))
                         {
-                            if (caster->m_currentSpells[CURRENT_CHANNELED_SPELL])
+                            if (Spell* spell = caster->m_currentSpells[CURRENT_CHANNELED_SPELL])
                             {
-                                caster->m_currentSpells[CURRENT_CHANNELED_SPELL]->SendChannelUpdate(0);
-                                caster->m_currentSpells[CURRENT_CHANNELED_SPELL]->finish();
+                                spell->SendChannelUpdate(0);
+                                spell->finish();
                             }
                         }
                     }
@@ -490,7 +495,7 @@ void GameObject::Update(uint32 update_diff, uint32 p_time)
 
 void GameObject::Refresh()
 {
-    // not refresh despawned not casted GO (despawned casted GO destroyed in all cases anyway)
+    // not refresh despawned not cast GO (despawned cast GO destroyed in all cases anyway)
     if (m_respawnTime > 0 && m_spawnedByDefault)
         return;
 
@@ -857,7 +862,23 @@ void GameObject::Despawn()
     if (GetOwnerGUID())
     {
         if (Unit* owner = GetOwner())
+        {
             owner->RemoveGameObject(this, false);
+
+            if (this->GetGoType() == GAMEOBJECT_TYPE_FISHINGNODE && owner->GetTypeId() == TYPEID_PLAYER) 
+            {
+                Player *player = (Player *)owner;
+
+                if (player && player->m_currentSpells[CURRENT_CHANNELED_SPELL])
+                {
+                    player->m_currentSpells[CURRENT_CHANNELED_SPELL]->SendChannelUpdate(0);
+                    player->m_currentSpells[CURRENT_CHANNELED_SPELL]->finish();
+
+                    WorldPacket data(SMSG_FISH_NOT_HOOKED, 0);
+                    player->SendPacketToSelf(&data);
+                }
+            }
+        }
 
         m_respawnTime = 0;
         Delete();
@@ -1134,7 +1155,7 @@ void GameObject::Use(Unit* user)
                         break;
                 }
 
-                pPlayer->CastedCreatureOrGO(GetEntry(), GetGUID(), 0);
+                pPlayer->CastCreatureOrGO(GetEntry(), GetGUID(), 0);
 
                 if (info->goober.eventId)
                 {
@@ -1479,7 +1500,7 @@ void GameObject::CastSpell(Unit* target, uint32 spell)
     else
     {
         trigger->setFaction(14);
-        trigger->CastSpell(target, spell, true, 0, 0, target->GetGUID());
+        trigger->CastSpell(target, spell, true, 0, 0, target != nullptr ? target->GetGUID() : NULL);
     }
     //trigger->setDeathState(JUST_DIED);
     //trigger->RemoveCorpse();
@@ -1500,7 +1521,7 @@ void GameObject::CastSpell(GameObject* target, uint32 spell)
     else
     {
         trigger->setFaction(14);
-        trigger->CastSpell(target, spell, true, 0, 0, target->GetGUID());
+        trigger->CastSpell(target, spell, true, 0, 0, target != nullptr ? target->GetGUID() : 0);
     }
 }
 
@@ -1563,7 +1584,7 @@ void GameObject::HandleNonDbcSpell(uint32 spellId, Player* pUser)
         }
 
         default:
-            sLog.outDebug("Gameobject: %s, %u type: %u. casted non-handled and non-existing spell: %u", GetName(), GetEntry(), GetGoType(), spellId);
+            sLog.outDebug("Gameobject: %s, %u type: %u. cast non-handled and non-existing spell: %u", GetName(), GetEntry(), GetGoType(), spellId);
             break;
     }
 }

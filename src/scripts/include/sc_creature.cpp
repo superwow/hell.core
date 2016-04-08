@@ -1,9 +1,23 @@
-/* Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+/*
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * Thanks to the original authors: ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
  *
- * This program is free software licensed under GPL version 2
- * Please see the included DOCS/LICENSE.TXT for more information */
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ */
 
 #include "precompiled.h"
 #include "Item.h"
@@ -327,12 +341,12 @@ void ScriptedAI::CastNextSpellIfAnyAndReady(uint32 diff)
         return;
     }
 
-    bool casted = false;
+    bool cast = false;
 
-    if (m_creature->hasUnitState(UNIT_STAT_CASTING))
-        casted = true;
+    if (m_creature->hasUnitState(UNIT_STAT_CASTING) || me->IsNonMeleeSpellCast(true))
+        cast = true;
 
-    if (!spellList.empty() && !casted)
+    if (!spellList.empty() && !cast)
     {
         SpellToCast temp(spellList.front());
         spellList.pop_front();
@@ -347,7 +361,7 @@ void ScriptedAI::CastNextSpellIfAnyAndReady(uint32 diff)
         if (temp.isDestCast)
         {
             m_creature->CastSpell(temp.castDest[0], temp.castDest[1], temp.castDest[2], temp.spellId, temp.triggered);
-            casted = true;
+            cast = true;
             return;
         }
 
@@ -369,7 +383,7 @@ void ScriptedAI::CastNextSpellIfAnyAndReady(uint32 diff)
             if (tempU && tempU->IsInWorld() && tempU->isAlive() && tempU->IsInMap(m_creature))
                 if (temp.spellId)
                 {
-                    if(temp.setAsTarget)
+                    if(temp.setAsTarget && !m_creature->hasIgnoreVictimSelection())
                         m_creature->SetSelection(temp.targetGUID);
                     if(temp.hasCustomValues)
                         m_creature->CastCustomSpell(tempU, temp.spellId, &temp.damage[0], &temp.damage[1], &temp.damage[2], temp.triggered);
@@ -385,14 +399,14 @@ void ScriptedAI::CastNextSpellIfAnyAndReady(uint32 diff)
                 m_creature->CastSpell((Unit*)NULL, temp.spellId, temp.triggered);
         }
 
-        casted = true;
+        cast = true;
     }
 
     if (autocast)
     {
         if (autocastTimer < diff)
         {
-            if (!casted)
+            if (!cast)
             {
                 Unit * victim = NULL;
 
@@ -435,7 +449,7 @@ void ScriptedAI::CastNextSpellIfAnyAndReady(uint32 diff)
                         }
                 }
 
-                if (victim)
+                if (victim && !m_creature->hasIgnoreVictimSelection())
                 {
                     m_creature->SetSelection(victim->GetGUID());    // for autocast always target actual victim
                     m_creature->CastSpell(victim, autocastId, false);
@@ -468,7 +482,7 @@ void ScriptedAI::DoCastAOE(uint32 spellId, bool triggered)
 
 void ScriptedAI::DoCastSpell(Unit* who,SpellEntry const *spellInfo, bool triggered)
 {
-    if (/*!who || */m_creature->IsNonMeleeSpellCasted(false))
+    if (/*!who || */m_creature->IsNonMeleeSpellCast(false))
         return;
 
     m_creature->CastSpell(who, spellInfo, triggered);
@@ -546,7 +560,7 @@ void ScriptedAI::ForceSpellCast(Unit *victim, uint32 spellId, interruptSpell int
             m_creature->InterruptNonMeleeSpells(false);
             break;
         case INTERRUPT_AND_CAST_INSTANTLY:
-            if(visualTarget)
+            if(visualTarget && !m_creature->hasIgnoreVictimSelection())
                 m_creature->SetSelection(victim->GetGUID());
 
             m_creature->CastSpell(victim, spellId, triggered);
@@ -571,7 +585,7 @@ void ScriptedAI::ForceSpellCastWithScriptText(Unit *victim, uint32 spellId, int3
             if (scriptTextEntry)
                 DoScriptText(scriptTextEntry, m_creature, victim);
 
-            if (visualTarget)
+            if (visualTarget && !m_creature->hasIgnoreVictimSelection())
                 m_creature->SetSelection(victim->GetGUID());
 
             m_creature->CastSpell(victim, spellId, triggered);
@@ -733,7 +747,7 @@ void ScriptedAI::DoPlaySoundToSet(WorldObject* unit, uint32 sound)
 
 Creature* ScriptedAI::DoSpawnCreature(uint32 id, float x, float y, float z, float angle, uint32 type, uint32 despawntime)
 {
-    return m_creature->SummonCreature(id,m_creature->GetPositionX() + x,m_creature->GetPositionY() + y,m_creature->GetPositionZ() + z, angle, (TempSummonType)type, despawntime);
+    return m_creature->SummonCreature(id,m_creature->GetPositionX() + x,m_creature->GetPositionY() + y,m_creature->GetPositionZ() + z, angle, (TemporarySummonType)type, despawntime);
 }
 
 SpellEntry const* ScriptedAI::SelectSpell(Unit* pTarget, int32 uiSchool, int32 uiMechanic, SelectTargetType selectTargets, uint32 uiPowerCostMin, uint32 uiPowerCostMax, float fRangeMin, float fRangeMax, SelectEffect selectEffects)
@@ -928,8 +942,8 @@ void ScriptedAI::DoResetThreat()
         return;
     }
 
-    std::list<HostilReference*>& m_threatlist = m_creature->getThreatManager().getThreatList();
-    std::list<HostilReference*>::iterator itr;
+    std::list<HostileReference*>& m_threatlist = m_creature->getThreatManager().getThreatList();
+    std::list<HostileReference*>::iterator itr;
 
     for(itr = m_threatlist.begin(); itr != m_threatlist.end(); ++itr)
     {

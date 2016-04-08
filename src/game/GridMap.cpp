@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -8,12 +9,12 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #include "MapManager.h"
@@ -610,7 +611,7 @@ bool GridMap::ExistVMap(uint32 mapid,int gx,int gy)
 }
 
 //////////////////////////////////////////////////////////////////////////
-TerrainInfo::TerrainInfo(uint32 mapid, TerrainSpecifics terrainspecifics) : m_mapId(mapid), specifics(terrainspecifics)
+TerrainInfo::TerrainInfo(uint32 mapid, TerrainSpecifics terrainspecifics) : m_mapId(mapid)
 {
     for (int k = 0; k < MAX_NUMBER_OF_GRIDS; ++k)
     {
@@ -628,6 +629,8 @@ TerrainInfo::TerrainInfo(uint32 mapid, TerrainSpecifics terrainspecifics) : m_ma
 
     i_timer.SetInterval(iCleanUpInterval * 1000);
     i_timer.SetCurrent(iRandomStart * 1000);
+
+    m_specifics = new MapTemplate(terrainspecifics);
 }
 
 TerrainInfo::~TerrainInfo()
@@ -638,6 +641,9 @@ TerrainInfo::~TerrainInfo()
 
      VMAP::VMapFactory::createOrGetVMapManager()->unloadMap(m_mapId);
      MMAP::MMapFactory::createOrGetMMapManager()->unloadMap(m_mapId);
+
+     delete m_specifics;
+     m_specifics = nullptr;
 }
 
 GridMap * TerrainInfo::Load(const uint32 x, const uint32 y)
@@ -1031,7 +1037,6 @@ GridMap* TerrainInfo::LoadMapAndVMap(const uint32 x, const uint32 y)
             }
 
             delete [] tmp;
-            m_GridMaps[x][y] = map;
 
             //load VMAPs for current map/grid...
             const MapEntry * i_mapEntry = sMapStore.LookupEntry(m_mapId);
@@ -1051,6 +1056,8 @@ GridMap* TerrainInfo::LoadMapAndVMap(const uint32 x, const uint32 y)
             }
 
             MMAP::MMapFactory::createOrGetMMapManager()->loadMap(m_mapId, x, y);
+
+            m_GridMaps[x][y] = map;
         }
     }
 
@@ -1080,32 +1087,40 @@ float TerrainInfo::GetWaterLevel(float x, float y, float z, float* pGround /*= N
 
 bool TerrainInfo::IsLineOfSightEnabled() const
 {
-    if (GetSpecifics()->lineofsight == F_ALWAYS_DISABLED)
+    const TerrainSpecifics* specifics = GetSpecifics();
+    if (specifics == nullptr)
+        return true;
+
+    if (specifics->lineofsight == F_ALWAYS_DISABLED)
         return false;
 
-    if (GetSpecifics()->lineofsight == F_ALWAYS_ENABLED)
+    if (specifics->lineofsight == F_ALWAYS_ENABLED)
         return sWorld.getConfig(CONFIG_VMAP_LOS_ENABLED);
 
     if (sWorld.getConfig(CONFIG_COREBALANCER_ENABLED))
     {
-        if (GetSpecifics()->lineofsight <= sWorld.GetCoreBalancerTreshold())
+        if (specifics->lineofsight <= sWorld.GetCoreBalancerTreshold())
             return false;
     }
 
-    return GetSpecifics()->lineofsight != F_ALWAYS_DISABLED && sWorld.getConfig(CONFIG_VMAP_LOS_ENABLED);
+    return specifics->lineofsight != F_ALWAYS_DISABLED && sWorld.getConfig(CONFIG_VMAP_LOS_ENABLED);
 }
 
 bool TerrainInfo::IsPathFindingEnabled() const
 {
-    if (GetSpecifics()->pathfinding == F_ALWAYS_DISABLED)
+    const TerrainSpecifics* specifics = GetSpecifics();
+    if (specifics == nullptr)
         return false;
 
-    if (GetSpecifics()->pathfinding == F_ALWAYS_ENABLED)
+    if (specifics->pathfinding == F_ALWAYS_DISABLED)
+        return false;
+
+    if (specifics->pathfinding == F_ALWAYS_ENABLED)
         return sWorld.getConfig(CONFIG_MMAP_ENABLED);
 
     if (sWorld.getConfig(CONFIG_COREBALANCER_ENABLED))
     {
-        if (GetSpecifics()->pathfinding <= sWorld.GetCoreBalancerTreshold())
+        if (specifics->pathfinding <= sWorld.GetCoreBalancerTreshold())
             return false;
     }
 
@@ -1114,10 +1129,15 @@ bool TerrainInfo::IsPathFindingEnabled() const
 
 float TerrainInfo::GetVisibilityDistance()
 {
-    if (sWorld.GetCoreBalancerTreshold() >= CB_VISIBILITY_PENALTY)
-        return GetSpecifics()->visibility - sWorld.getConfig(CONFIG_COREBALANCER_VISIBILITY_PENALTY);
+    const TerrainSpecifics* specifics = GetSpecifics();
+    if (specifics == nullptr)
+        return DEFAULT_VISIBILITY_DISTANCE;
 
-    return GetSpecifics()->visibility;
+    float visibility = specifics->visibility;
+    if (sWorld.GetCoreBalancerTreshold() >= CB_VISIBILITY_PENALTY)
+        visibility -= sWorld.getConfig(CONFIG_COREBALANCER_VISIBILITY_PENALTY);
+
+    return visibility;
 }
 
 //////////////////////////////////////////////////////////////////////////

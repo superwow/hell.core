@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,8 +18,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
-#ifndef _SPELLMGR_H
-#define _SPELLMGR_H
+#ifndef HELLGROUND_SPELLMGR_H
+#define HELLGROUND_SPELLMGR_H
 
 // For static or at-server-startup loaded spell data
 // For more high level function for sSpellStore data
@@ -162,11 +162,11 @@ enum ProcFlags
    PROC_FLAG_SUCCESSFUL_RANGED_SPELL_HIT     = 0x00000100,    // 08 Successful Ranged attack by Spell that use ranged weapon
    PROC_FLAG_TAKEN_RANGED_SPELL_HIT          = 0x00000200,    // 09 Taken damage by Spell that use ranged weapon
 
-   PROC_FLAG_SUCCESSFUL_POSITIVE_AOE_HIT     = 0x00000400,    // 10 Successful AoE (not 100% shure unused)
-   PROC_FLAG_TAKEN_POSITIVE_AOE              = 0x00000800,    // 11 Taken AoE      (not 100% shure unused)
+   PROC_FLAG_SUCCESSFUL_POSITIVE_AOE_HIT     = 0x00000400,    // 10 Successful AoE (unused)
+   PROC_FLAG_TAKEN_POSITIVE_AOE              = 0x00000800,    // 11 Taken AoE      (unused)
 
-   PROC_FLAG_SUCCESSFUL_AOE_SPELL_HIT        = 0x00001000,    // 12 Successful AoE damage spell hit (not 100% shure unused)
-   PROC_FLAG_TAKEN_AOE_SPELL_HIT             = 0x00002000,    // 13 Taken AoE damage spell hit      (not 100% shure unused)
+   PROC_FLAG_SUCCESSFUL_AOE_SPELL_HIT        = 0x00001000,    // 12 Successful AoE damage spell hit (unused)
+   PROC_FLAG_TAKEN_AOE_SPELL_HIT             = 0x00002000,    // 13 Taken AoE damage spell hit      (unused)
 
    PROC_FLAG_SUCCESSFUL_POSITIVE_SPELL       = 0x00004000,    // 14 Successful cast positive spell (by default only on healing)
    PROC_FLAG_TAKEN_POSITIVE_SPELL            = 0x00008000,    // 15 Taken positive spell hit (by default only on healing)
@@ -411,7 +411,7 @@ enum AttributesCu
     SPELL_ATTR_CU_FAKE_DELAY            = 0x00010000,
     SPELL_ATTR_CU_FIXED_DAMAGE          = 0x00020000, // ignore all %dmg done, %dmg taken auras
     SPELL_ATTR_CU_NO_SPELL_DMG_COEFF    = 0x00040000, // to those spells won't be applied and bonuses from spell dmg
-    SPELL_ATTR_CU_TREAT_AS_WELL_FEED    = 0x00080000,
+    SPELL_ATTR_CU_TREAT_AS_WELL_FED     = 0x00080000,
     SPELL_ATTR_CU_NO_SCROLL_STACK       = 0x00100000  // for spells which can't stack with scrolls (must be also applied to scroll spells)
 };
 

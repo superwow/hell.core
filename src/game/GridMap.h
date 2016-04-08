@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -8,12 +9,12 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #ifndef HELLGROUND_GRIDMAP_H
@@ -256,7 +257,7 @@ class HELLGROUND_IMPORT_EXPORT TerrainInfo : public Referencable<AtomicLong>
         bool GetAreaInfo(float x, float y, float z, uint32 &mogpflags, int32 &adtId, int32 &rootId, int32 &groupId) const;
         bool IsOutdoors(float x, float y, float z) const;
 
-        TerrainSpecifics const* GetSpecifics() const { return &specifics; }
+        TerrainSpecifics const* GetSpecifics() const { return m_specifics; }
 
         //this method should be used only by TerrainManager
         //to cleanup unreferenced GridMap objects - they are too heavy
@@ -287,7 +288,7 @@ class HELLGROUND_IMPORT_EXPORT TerrainInfo : public Referencable<AtomicLong>
 
         const uint32 m_mapId;
 
-        TerrainSpecifics specifics;
+        TerrainSpecifics* m_specifics;
 
         GridMap *m_GridMaps[MAX_NUMBER_OF_GRIDS][MAX_NUMBER_OF_GRIDS];
         int16 m_GridRef[MAX_NUMBER_OF_GRIDS][MAX_NUMBER_OF_GRIDS];

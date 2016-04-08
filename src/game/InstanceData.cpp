@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,10 @@
 #include "Map.h"
 #include "GameObject.h"
 #include "Creature.h"
+#include "MapRefManager.h"
+#include "MapReference.h"
+#include "Language.h"
+#include "Player.h"
 
 void InstanceData::SaveToDB()
 {
@@ -227,5 +231,22 @@ void InstanceData::HandleRequiredEncounter(uint32 encounter)
                                                         if (tmp != nullptr)
                                                             tmp->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                                                     });
+    }
+}
+
+void InstanceData::LogPossibleCheaters(const char* cheatName)
+{
+    std::string playerlist="";
+    Map::PlayerList players = instance->GetPlayers();
+    if (Player* pPlayer = players.getFirst()->getSource())
+    {
+        for (MapRefManager::iterator itr = players.begin(); itr != players.end(); ++itr)
+        {
+            playerlist += itr->getSource()->GetName();
+            playerlist += " ";
+        }
+        sLog.outLog(LOG_CHEAT,"Possible cheaters(%s): %s",cheatName,playerlist.c_str());
+    
+        sWorld.SendGMText(LANG_POSSIBLE_CHEAT, cheatName, pPlayer->GetName(),playerlist.c_str());
     }
 }

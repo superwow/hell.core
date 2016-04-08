@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -240,6 +240,30 @@ bool ChatHandler::HandleAccountWeatherCommand(const char* args)
     return true;
 }
 
+bool ChatHandler::HandleArenaReadyCommand(const char* args)
+{
+    Player* player = m_session->GetPlayer();
+    if ( !player->InArena() )
+    {
+        PSendSysMessage("You can use this command only in arena.");
+        return false;
+    }
+
+    BattleGround* bg = player->GetBattleGround();
+    if ( bg == nullptr )
+        return false;
+
+    bool result = bg->SetPlayerReady(player->GetGUID());
+    if (result)
+    {
+        PSendSysMessage("You have been NOT marked as ready due to some problems.");
+        return false;
+    }
+
+    PSendSysMessage("You have been marked as ready.");
+    return true;
+}
+
 bool ChatHandler::HandleServerInfoCommand(const char* /*args*/)
 {
     uint32 activeClientsNum = sWorld.GetActiveSessionCount();
@@ -270,6 +294,11 @@ bool ChatHandler::HandleServerEventsCommand(const char*)
 {
     std::string active_events = sGameEventMgr.getActiveEventsString();
     PSendSysMessage(active_events.c_str());//ChatHandler::FillMessageData(&data, this, CHAT_MSG_SYSTEM, LANG_UNIVERSAL, NULL, GetPlayer()->GetGUID(), active_events, NULL);
+    if(sWorld.getConfig(CONFIG_ARENA_DAILY_REQUIREMENT))
+    {
+        PSendSysMessage("Daily Arenas! Get %u AP for winning %u rated arenas",
+            sWorld.getConfig(CONFIG_ARENA_DAILY_AP_REWARD),sWorld.getConfig(CONFIG_ARENA_DAILY_REQUIREMENT));
+    }
     return true;
 }
 
@@ -402,67 +431,77 @@ bool ChatHandler::HandleServerMotdCommand(const char* /*args*/)
 
 bool ChatHandler::HandleServerPVPCommand(const char* /*args*/)
 {
-    Player *player=m_session->GetPlayer();
+    Player *player = m_session->GetPlayer();
 
     if (!sWorld.getConfig(CONFIG_BATTLEGROUND_QUEUE_INFO))
-    {
         PSendSysMessage("Battleground queue info is disabled");
-        return true;
-    }
-
-    if (!(player->InBattleGroundQueue()))
-        PSendSysMessage("You aren't in any battleground queue");
     else
     {
-        BattleGroundQueueTypeId qtype;
-        BattleGroundTypeId bgtype;
-        bool isbg;
-        for (int i=0; i < PLAYER_MAX_BATTLEGROUND_QUEUES; ++i)
+        if (!(player->InBattleGroundQueue()))
+            PSendSysMessage("You aren't in any battleground queue");
+        else
         {
-            qtype = player->GetBattleGroundQueueTypeId(i);
-            isbg = false;
-            switch (qtype)
+            BattleGroundQueueTypeId qtype;
+            BattleGroundTypeId bgtype;
+            bool isbg;
+            for (int i=0; i < PLAYER_MAX_BATTLEGROUND_QUEUES; ++i)
             {
-            case BATTLEGROUND_QUEUE_AB:
+                qtype = player->GetBattleGroundQueueTypeId(i);
+                isbg = false;
+                switch (qtype)
                 {
-                    PSendSysMessage("You are queued for Arathi Basin");
-                    isbg = true;
-                    bgtype = BATTLEGROUND_AB;
+                case BATTLEGROUND_QUEUE_AB:
+                    {
+                        PSendSysMessage("You are queued for Arathi Basin");
+                        isbg = true;
+                        bgtype = BATTLEGROUND_AB;
+                        break;
+                    }
+                case BATTLEGROUND_QUEUE_AV:
+                    {
+                        PSendSysMessage("You are queued for Alterac Valley");
+                        isbg = true;
+                        bgtype = BATTLEGROUND_AV;
+                        break;
+                    }
+                case BATTLEGROUND_QUEUE_WS:
+                    {
+                        PSendSysMessage("You are queued for Warsong Gulch");
+                        isbg = true;
+                        bgtype = BATTLEGROUND_WS;
+                        break;
+                    }
+                case BATTLEGROUND_QUEUE_EY:
+                    {
+                        PSendSysMessage("You are queued for Eye of the storm");
+                        isbg = true;
+                        bgtype = BATTLEGROUND_EY;
+                        break;
+                    }
+                default:
                     break;
                 }
-            case BATTLEGROUND_QUEUE_AV:
-                {
-                    PSendSysMessage("You are queued for Alterac Valley");
-                    isbg = true;
-                    bgtype = BATTLEGROUND_AV;
-                    break;
-                }
-            case BATTLEGROUND_QUEUE_WS:
-                {
-                    PSendSysMessage("You are queued for Warsong Gulch");
-                    isbg = true;
-                    bgtype = BATTLEGROUND_WS;
-                    break;
-                }
-            case BATTLEGROUND_QUEUE_EY:
-                {
-                    PSendSysMessage("You are queued for Eye of the storm");
-                    isbg = true;
-                    bgtype = BATTLEGROUND_EY;
-                    break;
-                }
-            default:
-                break;
-            }
 
-            if (isbg)
-            {
-                uint32 minPlayers = sBattleGroundMgr.GetBattleGroundTemplate(bgtype)->GetMinPlayersPerTeam();
-                uint32 queuedHorde = sBattleGroundMgr.m_BattleGroundQueues[qtype].GetQueuedPlayersCount(BG_TEAM_HORDE, player->GetBattleGroundBracketIdFromLevel(bgtype));
-                uint32 queuedAlliance = sBattleGroundMgr.m_BattleGroundQueues[qtype].GetQueuedPlayersCount(BG_TEAM_ALLIANCE, player->GetBattleGroundBracketIdFromLevel(bgtype));
-                PSendSysMessage("Horde queued: %u, Alliance queued: %u. Minimum per team: %u", queuedHorde, queuedAlliance, minPlayers);
+                if (isbg)
+                {
+                    uint32 minPlayers = sBattleGroundMgr.GetBattleGroundTemplate(bgtype)->GetMinPlayersPerTeam();
+                    uint32 queuedHorde = sBattleGroundMgr.m_BattleGroundQueues[qtype].GetQueuedPlayersCount(BG_TEAM_HORDE, player->GetBattleGroundBracketIdFromLevel(bgtype));
+                    uint32 queuedAlliance = sBattleGroundMgr.m_BattleGroundQueues[qtype].GetQueuedPlayersCount(BG_TEAM_ALLIANCE, player->GetBattleGroundBracketIdFromLevel(bgtype));
+                    PSendSysMessage("Horde queued: %u, Alliance queued: %u. Minimum per team: %u", queuedHorde, queuedAlliance, minPlayers);
+                }
             }
         }
     }
+
+    if (sWorld.getConfig(CONFIG_ARENA_STATUS_INFO))
+        PSendSysMessage("Arena status: %u players in 2v2, %u in 3v3, %u in 5v5",
+            sBattleGroundMgr.inArenasCount[0],sBattleGroundMgr.inArenasCount[1],sBattleGroundMgr.inArenasCount[2]);
+    else
+        PSendSysMessage("Arena status is disabled");
+
+    if(sWorld.getConfig(CONFIG_ARENA_DAILY_REQUIREMENT))
+        PSendSysMessage("Today you won %u rated arenas (%u required for reward)",
+            player->m_DailyArenasWon,sWorld.getConfig(CONFIG_ARENA_DAILY_REQUIREMENT));
+
     return true;
 }

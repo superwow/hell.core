@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
- *
- * Copyright (C) 2008-2009 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2009 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -10,12 +10,12 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #include "Common.h"
@@ -246,7 +246,7 @@ bool CreatureEventAI::ProcessEvent(CreatureEventAIHolder& pHolder, Unit* pAction
             break;
         }
         case EVENT_T_TARGET_CASTING:
-            if (!m_creature->isInCombat() || !m_creature->getVictim() || !m_creature->getVictim()->IsNonMeleeSpellCasted(false, false, true))
+            if (!m_creature->isInCombat() || !m_creature->getVictim() || !m_creature->getVictim()->IsNonMeleeSpellCast(false, false, true))
                 return false;
 
             //Repeat Timers
@@ -496,7 +496,7 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
                 caster = target;
 
             //Allowed to cast only if not casting (unless we interrupt ourself) or if spell is triggered
-            bool canCast = !caster->hasUnitState(UNIT_STAT_LOST_CONTROL) && (!caster->IsNonMeleeSpellCasted(false) || (action.cast.castFlags & (CAST_TRIGGERED | CAST_INTURRUPT_PREVIOUS)));
+            bool canCast = !caster->hasUnitState(UNIT_STAT_LOST_CONTROL) && (!caster->IsNonMeleeSpellCast(false) || (action.cast.castFlags & (CAST_TRIGGERED | CAST_INTURRUPT_PREVIOUS)));
 
             // If cast flag CAST_AURA_NOT_PRESENT is active, check if target already has aura on them
             if (action.cast.castFlags & CAST_AURA_NOT_PRESENT)
@@ -532,7 +532,7 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
                     else
                     {
                         //Interrupt any previous spell
-                        if (action.cast.castFlags & CAST_INTURRUPT_PREVIOUS && caster->IsNonMeleeSpellCasted(false))
+                        if (action.cast.castFlags & CAST_INTURRUPT_PREVIOUS && caster->IsNonMeleeSpellCast(false))
                             caster->InterruptNonMeleeSpells(false);
 
                         caster->CastSpell(target, action.cast.spellId, (action.cast.castFlags & CAST_TRIGGERED));
@@ -558,7 +558,7 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
             }
 
             //Allowed to cast only if not casting (unless we interrupt ourself) or if spell is triggered
-            bool canCast = !caster->IsNonMeleeSpellCasted(false) || (action.castguid.castFlags & (CAST_TRIGGERED | CAST_INTURRUPT_PREVIOUS));
+            bool canCast = !caster->IsNonMeleeSpellCast(false) || (action.castguid.castFlags & (CAST_TRIGGERED | CAST_INTURRUPT_PREVIOUS));
 
             // If cast flag CAST_AURA_NOT_PRESENT is active, check if target already has aura on them
             if (action.castguid.castFlags & CAST_AURA_NOT_PRESENT)
@@ -594,7 +594,7 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
                     else
                     {
                         //Interrupt any previous spell
-                        if (caster->IsNonMeleeSpellCasted(false) && action.castguid.castFlags & CAST_INTURRUPT_PREVIOUS)
+                        if (caster->IsNonMeleeSpellCast(false) && action.castguid.castFlags & CAST_INTURRUPT_PREVIOUS)
                             caster->InterruptNonMeleeSpells(false);
 
                         caster->CastSpell(target, action.castguid.spellId, (action.castguid.castFlags & CAST_TRIGGERED));
@@ -628,8 +628,8 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
             break;
         case ACTION_T_THREAT_ALL_PCT:
         {
-            std::list<HostilReference*>& threatList = m_creature->getThreatManager().getThreatList();
-            for (std::list<HostilReference*>::iterator i = threatList.begin(); i != threatList.end(); ++i)
+            std::list<HostileReference*>& threatList = m_creature->getThreatManager().getThreatList();
+            for (std::list<HostileReference*>::iterator i = threatList.begin(); i != threatList.end(); ++i)
                 if (Unit* Temp = Unit::GetUnit(*m_creature,(*i)->getUnitGuid()))
                     m_creature->getThreatManager().modifyThreatPercent(Temp, action.threat_all_pct.percent);
             break;
@@ -642,7 +642,7 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
         case ACTION_T_CAST_EVENT:
             if (Unit* target = GetTargetByType(action.cast_event.target, pActionInvoker))
                 if (target->GetTypeId() == TYPEID_PLAYER)
-                    ((Player*)target)->CastedCreatureOrGO(action.cast_event.creatureId, m_creature->GetGUID(), action.cast_event.spellId);
+                    ((Player*)target)->CastCreatureOrGO(action.cast_event.creatureId, m_creature->GetGUID(), action.cast_event.spellId);
             break;
         case ACTION_T_SET_UNIT_FIELD:
         {
@@ -680,7 +680,7 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
             {
                 if (action.combat_movement.melee && m_creature->isInCombat())
                     if (Unit* victim = m_creature->getVictim())
-                        m_creature->SendMeleeAttackStart(victim);
+                        m_creature->SendMeleeAttackStart(victim->GetGUID());
 
                 m_creature->GetMotionMaster()->MoveChase(m_creature->getVictim(), AttackDistance, AttackAngle);
             }
@@ -688,7 +688,7 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
             {
                 if (action.combat_movement.melee && m_creature->isInCombat())
                     if (Unit* victim = m_creature->getVictim())
-                        m_creature->SendMeleeAttackStop(victim);
+                        m_creature->SendMeleeAttackStop(victim->GetGUID());
 
                 if (!m_creature->hasUnitState(UNIT_STAT_LOST_CONTROL))
                     m_creature->GetMotionMaster()->MoveIdle();
@@ -739,11 +739,11 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
             break;
         case ACTION_T_CAST_EVENT_ALL:
         {
-            std::list<HostilReference*>& threatList = m_creature->getThreatManager().getThreatList();
-            for (std::list<HostilReference*>::iterator i = threatList.begin(); i != threatList.end(); ++i)
+            std::list<HostileReference*>& threatList = m_creature->getThreatManager().getThreatList();
+            for (std::list<HostileReference*>::iterator i = threatList.begin(); i != threatList.end(); ++i)
                 if (Unit* Temp = Unit::GetUnit(*m_creature,(*i)->getUnitGuid()))
                     if (Temp->GetTypeId() == TYPEID_PLAYER)
-                        ((Player*)Temp)->CastedCreatureOrGO(action.cast_event_all.creatureId, m_creature->GetGUID(), action.cast_event_all.spellId);
+                        ((Player*)Temp)->CastCreatureOrGO(action.cast_event_all.creatureId, m_creature->GetGUID(), action.cast_event_all.spellId);
             break;
         }
         case ACTION_T_REMOVEAURASFROMSPELL:

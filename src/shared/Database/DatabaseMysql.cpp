@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -8,12 +9,12 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #ifndef DO_POSTGRESQL
@@ -163,16 +164,6 @@ bool MySQLConnection::Initialize(const char *infoString)
         // server configs - core sends data in UTF8, so MySQL must expect UTF8 too
         Execute("SET NAMES `utf8`");
         Execute("SET CHARACTER SET `utf8`");
-
-    #if MYSQL_VERSION_ID >= 50003
-        my_bool my_true = (my_bool)1;
-        if (mysql_options(mMysql, MYSQL_OPT_RECONNECT, &my_true))
-            sLog.outDetail("Failed to turn on MYSQL_OPT_RECONNECT.");
-        else
-           sLog.outDetail("Successfully turned on MYSQL_OPT_RECONNECT.");
-    #else
-        #warning "Your mySQL client lib version does not support reconnecting after a timeout.\nIf this causes you any trouble we advice you to upgrade your mySQL client libs to at least mySQL 5.0.13 to resolve this problem."
-    #endif
 
         return true;
     }

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -134,7 +134,7 @@ void WorldSession::SendUpdateTrade()
     data << (uint32) TRADE_SLOT_COUNT;                      // trade slots count/number?, = next field in most cases
     data << (uint32) TRADE_SLOT_COUNT;                      // trade slots count/number?, = prev field in most cases
     data << (uint32) _player->pTrader->tradeGold;           // trader gold
-    data << (uint32) 0;                                     // spell casted on lowest slot item
+    data << (uint32) 0;                                     // spell cast on lowest slot item
 
     for (uint8 i = 0; i < TRADE_SLOT_COUNT; i++)
     {

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -10,12 +10,12 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 #include <iomanip>
 
@@ -694,8 +694,8 @@ bool ChatHandler::HandleDebugThreatList(const char * /*args*/)
         max_count = 3;
     }
 
-    std::list<HostilReference*>& tlist = target->getThreatManager().getThreatList();
-    std::list<HostilReference*>::iterator itr;
+    std::list<HostileReference*>& tlist = target->getThreatManager().getThreatList();
+    std::list<HostileReference*>::iterator itr;
     uint32 cnt = 0;
 
     PSendSysMessage("Threat list of %s (guid %u)",target->GetName(), target->GetGUIDLow());
@@ -715,12 +715,12 @@ bool ChatHandler::HandleDebugThreatList(const char * /*args*/)
     return true;
 }
 
-bool ChatHandler::HandleDebugHostilRefList(const char * /*args*/)
+bool ChatHandler::HandleDebugHostileRefList(const char * /*args*/)
 {
     Unit* target = getSelectedUnit();
     if (!target)
         target = m_session->GetPlayer();
-    HostilReference* ref = target->getHostilRefManager().getFirst();
+    HostileReference* ref = target->getHostileRefManager().getFirst();
     uint32 cnt = 0;
     PSendSysMessage("Hostile reference list of %s (guid %u)",target->GetName(), target->GetGUIDLow());
     while (ref)

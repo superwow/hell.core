@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -61,7 +61,7 @@ void TotemAI::UpdateAI(const uint32 /*diff*/)
 
     i_totem.SetSelection(0);
 
-    if (!i_totem.isAlive() || i_totem.IsNonMeleeSpellCasted(false))
+    if (!i_totem.isAlive() || i_totem.IsNonMeleeSpellCast(false))
         return;
 
     // Search spell
@@ -83,8 +83,8 @@ void TotemAI::UpdateAI(const uint32 /*diff*/)
 
     // Search victim if no, not attackable, or out of range, or friendly (possible in case duel end)
     if (!victim || (!SpellMgr::SpellIgnoreLOS(spellInfo, 0) && !i_totem.IsWithinLOSInMap(victim)) ||
-        !victim->isTargetableForAttack() || !i_totem.IsWithinDistInMap(victim, max_range) ||
-        (i_totem.IsFriendlyTo(victim) && victim != &i_totem) || !victim->isVisibleForOrDetect(&i_totem, &i_totem, false))
+       !victim->isTargetableForAttack() || !i_totem.IsWithinDistInMap(victim, max_range) ||  
+       (i_totem.IsFriendlyTo(victim) && victim != &i_totem) || !victim->isVisibleForOrDetect(&i_totem, &i_totem, false))
     {
         victim = NULL;
 
@@ -97,6 +97,9 @@ void TotemAI::UpdateAI(const uint32 /*diff*/)
     // If have target
     if (victim)
     {
+    //this should prevent target-type totems from attacking from unattackable zones and attacking while being unattackable
+        if ((i_totem.isInSanctuary() || victim->isInSanctuary()) && victim->GetCharmerOrOwnerPlayerOrPlayerItself())
+            return;
         // remember
         i_victimGuid = victim->GetGUID();
 

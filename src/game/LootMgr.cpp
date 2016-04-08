@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -235,11 +235,11 @@ bool LootStoreItem::Roll() const
         return true;
 
     if (mincountOrRef < 0)                                   // reference case
-        return roll_chance_f(chance*sWorld.getRate(RATE_DROP_ITEM_REFERENCED));
+        return roll_chance_f(chance*sWorld.getConfig(RATE_DROP_ITEM_REFERENCED));
 
     ItemPrototype const *pProto = ObjectMgr::GetItemPrototype(itemid);
 
-    float qualityModifier = pProto ? sWorld.getRate(qualityToRate[pProto->Quality]) : 1.0f;
+    float qualityModifier = pProto ? sWorld.getConfig(qualityToRate[pProto->Quality]) : 1.0f;
 
     return roll_chance_f(chance*qualityModifier);
 }
@@ -611,7 +611,8 @@ void Loot::saveLootToDB(Player *owner)
     RemoveSavedLootFromDB(pCreature);
 
     std::stringstream ss;
-    ss << "Player's group: " << owner->GetName() << ":(" << owner->GetGUIDLow() << ") " << "LootedItems: ";
+    ss << "Player's group: " << owner->GetName() << ":(" << owner->GetGUIDLow() << ") Map: " << m_mapID.nMapId
+        << " Id: " << m_mapID.nInstanceId << " Generated loot: ";
 
     std::stringstream guids;
 
@@ -646,7 +647,7 @@ void Loot::saveLootToDB(Player *owner)
                 stmt.addUInt32(pCreature->GetInstanceId());
                 stmt.addUInt32(item->itemid);
                 stmt.addUInt32(count);
-                stmt.addBool(pCreature->IsTempSummon());
+                stmt.addBool(pCreature->IsTemporarySummon());
                 stmt.addFloat(pCreature->GetPositionX());
                 stmt.addFloat(pCreature->GetPositionY());
                 stmt.addFloat(pCreature->GetPositionZ());
@@ -871,18 +872,23 @@ void Loot::generateMoneyLoot(uint32 minAmount, uint32 maxAmount)
     if (maxAmount > 0)
     {
         if (maxAmount <= minAmount)
-            gold = uint32(maxAmount * sWorld.getRate(RATE_DROP_MONEY));
+            gold = uint32(maxAmount * sWorld.getConfig(RATE_DROP_MONEY));
         else if ((maxAmount - minAmount) < 32700)
-            gold = uint32(urand(minAmount, maxAmount) * sWorld.getRate(RATE_DROP_MONEY));
+            gold = uint32(urand(minAmount, maxAmount) * sWorld.getConfig(RATE_DROP_MONEY));
         else
-            gold = uint32(urand(minAmount >> 8, maxAmount >> 8) * sWorld.getRate(RATE_DROP_MONEY)) << 8;
+            gold = uint32(urand(minAmount >> 8, maxAmount >> 8) * sWorld.getConfig(RATE_DROP_MONEY)) << 8;
     }
 }
 
-void Loot::setItemLooted(LootItem *pLootItem)
+void Loot::setItemLooted(LootItem *pLootItem, Player* looter)
 {
     pLootItem->is_looted = true;
+    if (pLootItem->freeforall || pLootItem->conditionId) // those are not saved, trying to remove them will cause log spam
+        return;
     removeItemFromSavedLoot(pLootItem);
+    if(looter && m_creatureGUID)
+        sLog.outLog(LOG_BOSS,"Map: %u ID: %u ; Item [%u] looted by %s (%u)",
+        m_mapID.nMapId,m_mapID.nInstanceId,pLootItem->itemid,looter->GetName(),looter->GetGUIDLow());
 }
 
 LootItem* Loot::LootItemInSlot(uint32 lootSlot, Player* player, QuestItem **qitem, QuestItem **ffaitem, QuestItem **conditem)

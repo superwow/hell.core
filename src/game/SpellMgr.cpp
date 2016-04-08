@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -10,12 +10,12 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #include "Unit.h"
@@ -58,7 +58,7 @@ SpellMgr::SpellMgr()
             case SPELL_EFFECT_SUMMON_OBJECT_SLOT2:  //105
             case SPELL_EFFECT_SUMMON_OBJECT_SLOT3:  //106
             case SPELL_EFFECT_SUMMON_OBJECT_SLOT4:  //107
-            case SPELL_EFFECT_SUMMON_DEAD_PET:      //109
+            case SPELL_EFFECT_RESURRECT_PET:        //109
             case SPELL_EFFECT_SUMMON_DEMON:         //112
             case SPELL_EFFECT_TRIGGER_SPELL_2:      //151 ritual of summon
                 EffectTargetType[i] = SPELL_REQUIRE_DEST;
@@ -427,7 +427,7 @@ SpellSpecific SpellMgr::GetSpellSpecific(uint32 spellId)
     if (!spellInfo)
         return SPELL_NORMAL;
 
-    if (spellInfo->AttributesCu & SPELL_ATTR_CU_TREAT_AS_WELL_FEED)
+    if (spellInfo->AttributesCu & SPELL_ATTR_CU_TREAT_AS_WELL_FED)
         return SPELL_WELL_FED;
 
     switch (spellInfo->SpellFamilyName)
@@ -780,7 +780,7 @@ bool SpellMgr::IsPositiveEffect(uint32 spellId, uint32 effIndex)
             {
                 case SPELL_AURA_DUMMY:
                 {
-                    // dummy aura can be positive or negative dependent from casted spell
+                    // dummy aura can be positive or negative dependent from cast spell
                     switch (spellproto->Id)
                     {
                         case 13139:                         // net-o-matic special effect
@@ -845,15 +845,15 @@ bool SpellMgr::IsPositiveEffect(uint32 spellId, uint32 effIndex)
                 case SPELL_AURA_PERIODIC_DAMAGE_PERCENT:
                     return false;
                 case SPELL_AURA_PERIODIC_DAMAGE:            // used in positive spells also.
-                    // part of negative spell if casted at self (prevent cancel)
+                    // part of negative spell if cast at self (prevent cancel)
                     if (spellproto->EffectImplicitTargetA[effIndex] == TARGET_UNIT_TARGET_ANY)
                         return false;
-                    // part of negative spell if casted at self (prevent cancel)
+                    // part of negative spell if cast at self (prevent cancel)
                     else if (spellproto->EffectImplicitTargetA[effIndex] == TARGET_UNIT_CASTER)
                         return false;
                     break;
                 case SPELL_AURA_MOD_DECREASE_SPEED:         // used in positive spells also
-                    // part of positive spell if casted at self
+                    // part of positive spell if cast at self
                     if (spellproto->EffectImplicitTargetA[effIndex] != TARGET_UNIT_CASTER)
                         return false;
                     // but not this if this first effect (don't found batter check)
@@ -1023,10 +1023,10 @@ SpellCastResult SpellMgr::GetErrorAtShapeshiftedCast (SpellEntry const *spellInf
 
     uint32 stanceMask = (form ? 1 << (form - 1) : 0);
 
-    if (stanceMask & spellInfo->StancesNot)                 // can explicitly not be casted in this stance
+    if (stanceMask & spellInfo->StancesNot)                 // can explicitly not be cast in this stance
         return SPELL_FAILED_NOT_SHAPESHIFT;
 
-    if (stanceMask & spellInfo->Stances)                    // can explicitly be casted in this stance
+    if (stanceMask & spellInfo->Stances)                    // can explicitly be cast in this stance
         return SPELL_CAST_OK;
 
     bool actAsShifted = false;
@@ -2066,13 +2066,13 @@ SpellEntry const* SpellMgr::SelectAuraRankForPlayerLevel(SpellEntry const* spell
 
     for (uint32 nextSpellId = spellInfo->Id; nextSpellId != 0; nextSpellId = GetPrevSpellInChain(nextSpellId))
     {
-        SpellEntry const *nextSpellInfo = sSpellStore.LookupEntry(nextSpellId);
-        if (!nextSpellInfo)
+        SpellEntry const *nextSpellEntry = sSpellStore.LookupEntry(nextSpellId);
+        if (!nextSpellEntry)
             break;
 
         // if found appropriate level
-        if (playerLevel + 10 >= nextSpellInfo->spellLevel)
-            return nextSpellInfo;
+        if (playerLevel + 10 >= nextSpellEntry->spellLevel)
+            return nextSpellEntry;
 
         // one rank less then
     }
@@ -2192,37 +2192,37 @@ void SpellMgr::LoadSpellChains()
 
         if (mSkillLineAbilityMap.lower_bound(spell_id)->second->id!=ability_id)
             continue;
-        SpellEntry const *SpellInfo=sSpellStore.LookupEntry(spell_id);
-        if (!SpellInfo)
+        SpellEntry const *SpellEntry=sSpellStore.LookupEntry(spell_id);
+        if (!SpellEntry)
             continue;
-        std::string sRank = SpellInfo->Rank[sWorld.GetDefaultDbcLocale()];
+        std::string sRank = SpellEntry->Rank[sWorld.GetDefaultDbcLocale()];
         if (sRank.empty())
             continue;
         //exception to polymorph spells-make pig and turtle other chain than sheep
-        if ((SpellInfo->SpellFamilyName==SPELLFAMILY_MAGE) && (SpellInfo->SpellFamilyFlags & 0x1000000) && (SpellInfo->SpellIconID!=82))
+        if ((SpellEntry->SpellFamilyName==SPELLFAMILY_MAGE) && (SpellEntry->SpellFamilyFlags & 0x1000000) && (SpellEntry->SpellIconID!=82))
             continue;
 
         SpellRankEntry entry;
         SpellRankValue value;
         entry.SkillId=AbilityInfo->skillId;
-        entry.SpellName=SpellInfo->SpellName[sWorld.GetDefaultDbcLocale()];
-        entry.DurationIndex=SpellInfo->DurationIndex;
-        entry.RangeIndex=SpellInfo->rangeIndex;
-        entry.ProcFlags=SpellInfo->procFlags;
-        entry.SpellFamilyFlags=SpellInfo->SpellFamilyFlags;
-        entry.TargetAuraState=SpellInfo->TargetAuraState;
-        entry.SpellVisual=SpellInfo->SpellVisual;
-        entry.ManaCost=SpellInfo->manaCost;
+        entry.SpellName=SpellEntry->SpellName[sWorld.GetDefaultDbcLocale()];
+        entry.DurationIndex=SpellEntry->DurationIndex;
+        entry.RangeIndex=SpellEntry->rangeIndex;
+        entry.ProcFlags=SpellEntry->procFlags;
+        entry.SpellFamilyFlags=SpellEntry->SpellFamilyFlags;
+        entry.TargetAuraState=SpellEntry->TargetAuraState;
+        entry.SpellVisual=SpellEntry->SpellVisual;
+        entry.ManaCost=SpellEntry->manaCost;
 
         for (;;)
         {
             AbilityInfo=mSkillLineAbilityMap.lower_bound(spell_id)->second;
             value.Id=spell_id;
-            value.Rank=SpellInfo->Rank[sWorld.GetDefaultDbcLocale()];
+            value.Rank=SpellEntry->Rank[sWorld.GetDefaultDbcLocale()];
             RankMap.insert(std::pair<SpellRankEntry, SpellRankValue>(entry,value));
             spell_id=AbilityInfo->forward_spellid;
-            SpellInfo=sSpellStore.LookupEntry(spell_id);
-            if (!SpellInfo)
+            SpellEntry=sSpellStore.LookupEntry(spell_id);
+            if (!SpellEntry)
                 break;
         }
     }
@@ -2274,10 +2274,10 @@ void SpellMgr::LoadSpellChains()
         {
             for (std::multimap<SpellRankEntry, SpellRankValue,SpellRankEntry>::iterator itr2 = RankMap.lower_bound(entry);itr2!=RankMap.upper_bound(entry);itr2++)
             {
-                SpellEntry const *SpellInfo=sSpellStore.LookupEntry(itr2->second.Id);
-                if (SpellInfo->spellLevel<min_spell_lvl || itr2==RankMap.lower_bound(entry))
+                SpellEntry const *SpellEntry=sSpellStore.LookupEntry(itr2->second.Id);
+                if (SpellEntry->spellLevel<min_spell_lvl || itr2==RankMap.lower_bound(entry))
                 {
-                    min_spell_lvl=SpellInfo->spellLevel;
+                    min_spell_lvl=SpellEntry->spellLevel;
                     min_itr=itr2;
                 }
             }
@@ -2783,7 +2783,7 @@ void SpellMgr::LoadSpellCustomAttr()
                     break;
                 case SPELL_EFFECT_CHARGE:
                 case SPELL_EFFECT_CHARGE2:
-                    if (!spellInfo->speed && !spellInfo->SpellFamilyName)
+                    if (!spellInfo->speed && spellInfo->SpellFamilyName == SPELLFAMILY_WARRIOR)
                         spellInfo->speed = SPEED_CHARGE;
                     spellInfo->AttributesCu |= SPELL_ATTR_CU_CHARGE;
                     break;
@@ -2846,6 +2846,8 @@ void SpellMgr::LoadSpellCustomAttr()
                      spellInfo->AuraInterruptFlags |= AURA_INTERRUPT_FLAG_CAST;
                  else if (spellInfo->SpellIconID == 2367) // remove flag from steam tonk & crashin trashin racers
                      spellInfo->AttributesEx4 &= ~SPELL_ATTR_EX4_FORCE_TRIGGERED;
+                 else if (spellInfo->Id == 34171 || spellInfo->Id == 37956) // underbat tentacle lash
+                     spellInfo->AttributesEx2 |= SPELL_ATTR_EX2_FROM_BEHIND;
                  break;
             }
             case SPELLFAMILY_SHAMAN:
@@ -2945,47 +2947,38 @@ void SpellMgr::LoadSpellCustomAttr()
         switch (i)
         {
             /* FIXED DAMAGE SPELLS */
-            // Ignite
-            case 12654:
+            case 12654: // Ignite
                 spellInfo->AttributesCu |= SPELL_ATTR_CU_FIXED_DAMAGE;
                 break;
-            case 16614:
-                spellInfo->AttributesCu |= SPELL_ATTR_CU_NO_SPELL_DMG_COEFF; //Storm Gauntlets - temporary workaround for hell too big spell coef
-                break;
-            case 7714:
-                spellInfo->AttributesCu |= SPELL_ATTR_CU_NO_SPELL_DMG_COEFF; //Fiery Plate Gauntlets - temporary workaround for hell too big spell coef (the same problem as Storm Gauntlets
-                break;
+            case 20532: // Intense Heat (Majordomo Executus lava pit)
+                spellInfo->AttributesEx2 |= SPELL_ATTR_EX2_CANT_CRIT;
+                // no break here
             /* NO SPELL DMG COEFF */
-            // Enduring Light - T6 proc
-            case 40471:
-            // Enduring Judgement - T6 proc
-            case 40472:
-            // Judgement of Blood
-            case 32221:
-            case 32220:
-            // Flame Cap, Scalding Water, Fiery Blaze
-            case 28715:
-            case 37284:
-            case 6297:
-            // Deathfrost
-            case 46579:
-            // Mana Tap
-            case 28734:
-            // SW: Death
-            case 32409:
+            case 16614: // Storm Gauntlets
+            case 7714:  // Fiery Plate Gauntlets
+            case 40471: // Enduring Light - T6 proc
+            case 40472: // Enduring Judgement - T6 proc
+            case 32221: // Seal of Blood
+            case 32220: // Judgement of Blood
+            case 28715: // Flame Cap
+            case 37284: // Scalding Water
+            case 6297:  // Fiery Blaze
+            case 46579: // Deathfrost
+            case 28734: // Mana Tap
+            case 32409: // SW: Death
+
             // Six Demon Bag spells
-            case 45297:   // Chain Lightning
-            case 2310:    // Frostbolt!
-            case 9487:    // Fireball !
-            // Shattered Sun Pendant of Acumen: Scryers ex proc
-            case 45429:
-            // Heart of Wyrmthalak: Flame Lash proc
-            case 27655:
-            case 45055:
-            // The Lightning Capacitor, lightning bolt spell
-            case 37661:
-            // Arcane Torrent
-            case 28733:
+            case 45297: // Chain Lightning
+            case 23102: // Frostbolt
+            case 9487:  // Fireball
+
+            case 45429: // Shattered Sun Pendant of Acumen: Scryers ex proc
+            case 27655: // Heart of Wyrmthalak: Flame Lash proc
+            case 45055: // Shadow Bolt (Timbal's Focusing Crystal)
+            case 37661: // The Lightning Capacitor, lightning bolt spell
+            case 28733: // Arcane Torrent
+            case 43731: // Lightning Zap on critters (Stormchops)
+            case 43733: // Lightning Zap on others (Stormchops)
                 spellInfo->AttributesCu |= SPELL_ATTR_CU_NO_SPELL_DMG_COEFF;
                 break;
             /* WELL FEED */
@@ -3005,12 +2998,13 @@ void SpellMgr::LoadSpellCustomAttr()
             case 18193:
             case 18125:
             case 18192:
-            case 23697:
             case 18141:
             case 18194:
             case 18222:
             case 22730:
-                spellInfo->AttributesCu |= SPELL_ATTR_CU_TREAT_AS_WELL_FEED;
+            case 23697:
+            case 25661: // Dirge's Kickin' Chimaerok Chops
+                spellInfo->AttributesCu |= SPELL_ATTR_CU_TREAT_AS_WELL_FED;
                 break;
             /* Scrolls - no stack */
             case 8112:  // Spirit I
@@ -3057,7 +3051,6 @@ void SpellMgr::LoadSpellCustomAttr()
                 break;
             /* HUNTER CUSTOM ATTRIBUTES */
             case 1543:                      // Flare no longer produces combat
-                spellInfo->speed = 0;
                 spellInfo->AttributesEx3 |= SPELL_ATTR_EX3_NO_INITIAL_AGGRO;
                 break;
             // Triggered spells that should be delayed
@@ -3109,8 +3102,14 @@ void SpellMgr::LoadSpellCustomAttr()
             case 24178: // Will of Hakkar
                 spellInfo->AttributesEx |= SPELL_ATTR_EX_CHANNELED_1;
                 break;
-            // Leggins of BeastMastery
-            case 38297:
+            case 28282: // Ashbringer
+                spellInfo->Effect[2] = SPELL_EFFECT_APPLY_AURA;
+                spellInfo->EffectImplicitTargetA[2] = TARGET_UNIT_CASTER;
+                spellInfo->EffectApplyAuraName[2] = SPELL_AURA_FORCE_REACTION;
+                spellInfo->EffectMiscValue[2] = 56; // Scarlet Crusade
+                spellInfo->EffectBasePoints[2] = 4; // Friendly
+                break;
+            case 38297: // Leggins of BeastMastery
                 spellInfo->Effect[0] = 0;
                 spellInfo->EffectApplyAuraName[1] = SPELL_AURA_DUMMY;
                 break;
@@ -3170,6 +3169,9 @@ void SpellMgr::LoadSpellCustomAttr()
                     case 43267:
                     case 43268:
                         spellInfo->MaxAffectedTargets = 2;
+                        break;
+                    case 45150:
+                        spellInfo->AttributesEx2 |= SPELL_ATTR_EX2_IGNORE_LOS;
                         break;
                 }
                 break;
@@ -3322,7 +3324,8 @@ void SpellMgr::LoadSpellCustomAttr()
                 break;
             case 37363: // set 5y radius instead of 25y
                 spellInfo->EffectRadiusIndex[0] = 8;
-                spellInfo->EffectRadiusIndex[0] = 8;
+                spellInfo->EffectRadiusIndex[1] = 8;
+                spellInfo->EffectMiscValue[1] = 50;
                 break;
             case 42835: // set visual only
                 spellInfo->Effect[0] = 0;
@@ -3334,6 +3337,7 @@ void SpellMgr::LoadSpellCustomAttr()
             case 46039:
                 spellInfo->AttributesEx2 |= SPELL_ATTR_EX2_IGNORE_LOS;
                 break;
+            case 21358: // Aqual Quintessence / Eternal Quintessence
             case 47977: // Broom Broom
             case 42679:
             case 42673:
@@ -3348,6 +3352,7 @@ void SpellMgr::LoadSpellCustomAttr()
                 spellInfo->EffectTriggerSpell[1] = 43731;
                 spellInfo->EffectImplicitTargetA[1] = 1;
                 spellInfo->EffectImplicitTargetB[1] = 0;
+                spellInfo->AttributesCu |= SPELL_ATTR_CU_TREAT_AS_WELL_FED;
                 break;
             case 41470: //Judgement of Command should be reflectable
                 spellInfo->AttributesEx2 = 0;
@@ -3516,7 +3521,7 @@ void SpellMgr::LoadSpellCustomAttr()
                 break;
         }
     }
-    CreatureAI::FillAISpellInfo();
+    CreatureAI::FillAISpellEntry();
 }
 
 // TODO: move this to database along with slot position in cast bar

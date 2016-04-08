@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -10,12 +10,12 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #include "Common.h"
@@ -167,7 +167,7 @@ pAuraHandler AuraHandler[TOTAL_AURAS]=
     &Aura::HandleNoImmediateEffect,                         //109 SPELL_AURA_ADD_TARGET_TRIGGER
     &Aura::HandleModPowerRegenPCT,                          //110 SPELL_AURA_MOD_POWER_REGEN_PERCENT
     &Aura::HandleNoImmediateEffect,                         //111 SPELL_AURA_ADD_CASTER_HIT_TRIGGER implemented in Spell::SelectMagnetTarget and Unit::AttackerStateUpdate
-    &Aura::HandleNoImmediateEffect,                         //112 SPELL_AURA_OVERRIDE_CLASS_SCRIPTS
+    &Aura::HandleNoImmediateEffect,                         //112 SPELL_AURA_override_CLASS_SCRIPTS
     &Aura::HandleNoImmediateEffect,                         //113 SPELL_AURA_MOD_RANGED_DAMAGE_TAKEN implemented in Unit::MeleeDamageBonus
     &Aura::HandleNoImmediateEffect,                         //114 SPELL_AURA_MOD_RANGED_DAMAGE_TAKEN_PCT implemented in Unit::MeleeDamageBonus
     &Aura::HandleNoImmediateEffect,                         //115 SPELL_AURA_MOD_HEALING                 implemented in Unit::SpellBaseHealingBonusForVictim
@@ -792,13 +792,13 @@ void AreaAura::Update(uint32 diff)
                 if (!CheckTarget(*tIter))
                     continue;
 
-                if (SpellEntry const *actualSpellInfo = sSpellMgr.SelectAuraRankForPlayerLevel(GetSpellProto(), (*tIter)->getLevel()))
+                if (SpellEntry const *actualSpellEntry = sSpellMgr.SelectAuraRankForPlayerLevel(GetSpellProto(), (*tIter)->getLevel()))
                 {
                     AreaAura *aur;
-                    if (actualSpellInfo == GetSpellProto())
-                        aur = new AreaAura(actualSpellInfo, m_effIndex, &m_modifier.m_amount, (*tIter), caster, NULL);
+                    if (actualSpellEntry == GetSpellProto())
+                        aur = new AreaAura(actualSpellEntry, m_effIndex, &m_modifier.m_amount, (*tIter), caster, NULL);
                     else
-                        aur = new AreaAura(actualSpellInfo, m_effIndex, NULL, (*tIter), caster, NULL);
+                        aur = new AreaAura(actualSpellEntry, m_effIndex, NULL, (*tIter), caster, NULL);
 
                     (*tIter)->AddAura(aur);
 
@@ -1396,14 +1396,14 @@ void Aura::TriggerSpell()
 
     uint64 originalCasterGUID = GetCasterGUID();
 
-    SpellEntry const *triggeredSpellInfo = sSpellStore.LookupEntry(trigger_spell_id);
-    SpellEntry const *auraSpellInfo = GetSpellProto();
-    uint32 auraId = auraSpellInfo->Id;
+    SpellEntry const *triggeredSpellEntry = sSpellStore.LookupEntry(trigger_spell_id);
+    SpellEntry const *auraSpellEntry = GetSpellProto();
+    uint32 auraId = auraSpellEntry->Id;
 
     // specific code for cases with no trigger spell provided in field
-    if (triggeredSpellInfo == NULL)
+    if (triggeredSpellEntry == NULL)
     {
-        switch (auraSpellInfo->SpellFamilyName)
+        switch (auraSpellEntry->SpellFamilyName)
         {
             case SPELLFAMILY_GENERIC:
             {
@@ -1871,8 +1871,17 @@ void Aura::TriggerSpell()
 //                    case 39259: break;
 //                    // Hellfire - The Exorcism, Jules releases darkness, aura
 //                    case 39306: break;
-//                    // Inferno
-//                    case 39346: break;
+//                    // Inferno - Raging Fires in Mechanar
+                    case 39346:
+                    {
+                        if (caster->GetTypeId() != TYPEID_UNIT)
+                            return;
+                        if (!caster->GetInstanceData())
+                            return;
+                        int32 damage = (caster->GetInstanceData()->instance->IsHeroic() ? 1880 : 940);
+                        caster->CastCustomSpell((Unit*)NULL, 35283, &damage, NULL, NULL, true, 0, this, originalCasterGUID);
+                        break;
+                    }
 //                    // Enchanted Weapons
 //                    case 39489: break;
 //                    // Shadow Bolt Whirl
@@ -2003,7 +2012,7 @@ void Aura::TriggerSpell()
                     // Open Portal Periodic
                     case 45994: trigger_spell_id = 45976; break;
 //                    // Earthquake
-//                    case 46240: break;
+                    case 46240: trigger_spell_id = 46243; break;
                     // Personalized Weather
                     case 46736: trigger_spell_id = 46737; break;
 //                    // Stay Submerged
@@ -2038,7 +2047,7 @@ void Aura::TriggerSpell()
                         if (!m_duration)
                             m_target->CastSpell(m_target, 32612, true, NULL, this);
                         else if (m_tickNumber < 5)
-                            m_target->getHostilRefManager().addThreatPercent(-(int32)(100/(6-m_tickNumber)));
+                            m_target->getHostileRefManager().addThreatPercent(-(int32)(100/(6-m_tickNumber)));
                         return;
                     }
                     default:
@@ -2244,8 +2253,8 @@ void Aura::TriggerSpell()
                 break;
         }
         // Reget trigger spell proto
-        triggeredSpellInfo = sSpellStore.LookupEntry(trigger_spell_id);
-        if (triggeredSpellInfo == NULL)
+        triggeredSpellEntry = sSpellStore.LookupEntry(trigger_spell_id);
+        if (triggeredSpellEntry == NULL)
         {
             sLog.outDebug("Aura::TriggerSpell: Spell %u have 0 in EffectTriggered[%d], not handled custom case?",GetId(),GetEffIndex());
             return;
@@ -2259,7 +2268,7 @@ void Aura::TriggerSpell()
             // Curse of Idiocy
             case 1010:
             {
-                // TODO: spell casted by result in correct way mostly
+                // TODO: spell cast by result in correct way mostly
                 // BUT:
                 // 1) target show casting at each triggered cast: target don't must show casting animation for any triggered spell
                 //      but must show affect apply like item casting
@@ -2312,8 +2321,8 @@ void Aura::TriggerSpell()
             {
                 if (caster->CanHaveThreatList())
                 {
-                    std::list<HostilReference*>& m_threatlist = caster->getThreatManager().getThreatList();
-                    std::list<HostilReference*>::iterator i = m_threatlist.begin();
+                    std::list<HostileReference*>& m_threatlist = caster->getThreatManager().getThreatList();
+                    std::list<HostileReference*>::iterator i = m_threatlist.begin();
                     while (m_threatlist.size())
                     {
                         i = m_threatlist.begin();
@@ -2338,10 +2347,10 @@ void Aura::TriggerSpell()
                 if (caster->CanHaveThreatList())
                 {
                     target = NULL;
-                    std::list<HostilReference*> targets(caster->getThreatManager().getThreatList());
+                    std::list<HostileReference*> targets(caster->getThreatManager().getThreatList());
                     while (!targets.empty())
                     {
-                        std::list<HostilReference*>::iterator i = targets.begin();
+                        std::list<HostileReference*>::iterator i = targets.begin();
                         advance(i, rand()%targets.size());
                         Unit *unit = caster->GetUnit((*i)->getUnitGuid());
                         if (unit && unit->GetTypeId() == TYPEID_PLAYER && !unit->IsWithinDistInMap(caster, 18))
@@ -2355,7 +2364,7 @@ void Aura::TriggerSpell()
                     if (!target)
                         return;
 
-                    caster->CastSpell(target, triggeredSpellInfo, true, 0, this, originalCasterGUID);
+                    caster->CastSpell(target, triggeredSpellEntry, true, 0, this, originalCasterGUID);
                     return;
                 }
             }
@@ -2366,7 +2375,7 @@ void Aura::TriggerSpell()
             // Burn should self-damage Phoenix
             case 44197:
             {
-                uint32 damage = caster->CalculateSpellDamage(triggeredSpellInfo, 0, 1750,caster);
+                uint32 damage = caster->CalculateSpellDamage(triggeredSpellEntry, 0, 1750,caster);
                 caster->DealDamage(caster, damage, SPELL_DIRECT_DAMAGE, SPELL_SCHOOL_MASK_FIRE, GetSpellProto(), false);
                 break;
             }
@@ -2392,10 +2401,10 @@ void Aura::TriggerSpell()
                 break;
         }
     }
-    if (!SpellMgr::GetSpellMaxRange(sSpellRangeStore.LookupEntry(triggeredSpellInfo->rangeIndex)))
+    if (!SpellMgr::GetSpellMaxRange(sSpellRangeStore.LookupEntry(triggeredSpellEntry->rangeIndex)))
         target = m_target;    //for druid dispel poison
 
-    m_target->CastSpell(target, triggeredSpellInfo, true, 0, this, originalCasterGUID);
+    m_target->CastSpell(target, triggeredSpellEntry, true, 0, this, originalCasterGUID);
 }
 
 Unit* Aura::GetTriggerTarget() const
@@ -2429,16 +2438,16 @@ void Aura::TriggerSpellWithValue()
             basepoints = 0;
     }
 
-    SpellEntry const *triggeredSpellInfo = sSpellStore.LookupEntry(trigger_spell_id);
+    SpellEntry const *triggeredSpellEntry = sSpellStore.LookupEntry(trigger_spell_id);
     int32 bp[3];
     // damage triggered from spell might not only be processed by first effect (but always EffectDieSides equal 1)
-    if (triggeredSpellInfo)
+    if (triggeredSpellEntry)
     {
         uint8 j = 0;
         for (uint8 i=0;i<3;++i)
         {
             bp[i] = 0;
-            if (triggeredSpellInfo->EffectDieSides[i] == 1)
+            if (triggeredSpellEntry->EffectDieSides[i] == 1)
                 j = i;
         }
         bp[j] = basepoints;
@@ -2533,10 +2542,6 @@ void Aura::HandleAuraDummy(bool apply, bool Real)
             case 40133:                                     // Summon Fire Elemental
                 caster->SummonCreature(23099, -2459.64, 4754.64, 153.20, 4.89, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 600000);
                 break;
-            case 39850:                                     // Rocket Blast
-                if (roll_chance_i(20))                       // backfire stun
-                    m_target->CastSpell(m_target, 51581, true, NULL, this);
-                return;
             case 6946:                                     // Curse of Bleakheart
                 if (!m_target->HasAura(6947, 0))
                     m_target->CastSpell(m_target, 6947, true);
@@ -2711,7 +2716,7 @@ void Aura::HandleAuraDummy(bool apply, bool Real)
             }
             case 46308:        // Burning Winds
             {
-                m_target->CastSpell(m_target,47287,true,NULL,this); // casted only at creatures at spawn
+                m_target->CastSpell(m_target,47287,true,NULL,this); // cast only at creatures at spawn
                 return;
             }
             case 34477:        // Misdirection
@@ -4057,7 +4062,7 @@ void Aura::HandleFeignDeath(bool apply, bool Real)
 
         // feign death in pve
         bool resisted = false;
-        HostilReference *ref = m_target->getHostilRefManager().getFirst();
+        HostileReference *ref = m_target->getHostileRefManager().getFirst();
         while(ref)
         {
             Unit* target = ref->getSource()->getOwner();
@@ -4088,7 +4093,7 @@ void Aura::HandleFeignDeath(bool apply, bool Real)
                         if (target->m_currentSpells[i] && target->m_currentSpells[i]->m_targets.getUnitTargetGUID() == m_target->GetGUID())
                             target->InterruptSpell(i, false);
 
-                m_target->getHostilRefManager().deleteReference(target);
+                m_target->getHostileRefManager().deleteReference(target);
                 if(target->getVictimGUID() == m_target->GetGUID())
                     target->AttackStop();
             }
@@ -4192,8 +4197,8 @@ void Aura::HandleModStealth(bool apply, bool Real)
             if (pTarget->GetVisibility() != VISIBILITY_OFF)
                 pTarget->SetVisibility(VISIBILITY_GROUP_STEALTH);
 
-            // for RACE_NIGHTELF stealth
-            if (pTarget->GetTypeId() == TYPEID_PLAYER && spell_id == 20580)
+            // for RACE_NIGHTELF improved stealth from shadowmeld (this should actually be a learned spell)
+            if(m_target->GetTypeId()==TYPEID_PLAYER && m_target->getRace() == RACE_NIGHTELF)
                 pTarget->CastSpell(pTarget, 21009, true, NULL, this);
         }
     }
@@ -4202,10 +4207,6 @@ void Aura::HandleModStealth(bool apply, bool Real)
         // only at real aura remove
         if (Real)
         {
-            // for RACE_NIGHTELF stealth
-            if (pTarget->GetTypeId() == TYPEID_PLAYER && spell_id == 20580)
-                pTarget->RemoveAurasDueToSpell(21009);
-
             // if last SPELL_AURA_MOD_STEALTH and no GM invisibility
             if (!pTarget->HasAuraType(SPELL_AURA_MOD_STEALTH) && pTarget->GetVisibility()!=VISIBILITY_OFF)
             {
@@ -4338,7 +4339,7 @@ void Aura::HandleAuraModSilence(bool apply, bool Real)
         for (uint32 i = CURRENT_MELEE_SPELL; i < CURRENT_MAX_SPELL;i++)
         {
             Spell* currentSpell = m_target->m_currentSpells[i];
-            if (currentSpell && currentSpell->GetSpellInfo()->PreventionType == SPELL_PREVENTION_TYPE_SILENCE)
+            if (currentSpell && currentSpell->GetSpellEntry()->PreventionType == SPELL_PREVENTION_TYPE_SILENCE)
             {
                 uint32 state = currentSpell->getState();
                 // Stop spells on prepare or casting state
@@ -4425,7 +4426,7 @@ void Aura::HandleAuraModTotalThreat(bool apply, bool Real)
     else
         threatMod =  float(-GetModifierValue());
 
-    m_target->getHostilRefManager().threatAssist(caster, threatMod);
+    m_target->getHostileRefManager().threatAssist(caster, threatMod);
 }
 
 void Aura::HandleModTaunt(bool apply, bool Real)
@@ -5109,7 +5110,7 @@ void Aura::HandlePeriodicHeal(bool apply, bool Real)
                 {
                     if (Unit* caster = GetCaster())
                     {
-                        Unit::AuraList const& classScripts = caster->GetAurasByType(SPELL_AURA_OVERRIDE_CLASS_SCRIPTS);
+                        Unit::AuraList const& classScripts = caster->GetAurasByType(SPELL_AURA_override_CLASS_SCRIPTS);
                         for (Unit::AuraList::const_iterator k = classScripts.begin(); k != classScripts.end(); ++k)
                         {
                             int32 tickcount = SpellMgr::GetSpellDuration(m_spellProto) / m_spellProto->EffectAmplitude[m_effIndex];
@@ -5382,7 +5383,7 @@ void Aura::HandlePeriodicDamage(bool apply, bool Real)
                 {
                     if (Unit* caster = GetCaster())
                     {
-                        Unit::AuraList const& classScripts = caster->GetAurasByType(SPELL_AURA_OVERRIDE_CLASS_SCRIPTS);
+                        Unit::AuraList const& classScripts = caster->GetAurasByType(SPELL_AURA_override_CLASS_SCRIPTS);
                         for (Unit::AuraList::const_iterator k = classScripts.begin(); k != classScripts.end(); ++k)
                         {
                             int32 tickcount = SpellMgr::GetSpellDuration(m_spellProto) / m_spellProto->EffectAmplitude[m_effIndex];
@@ -5801,7 +5802,7 @@ void Aura::HandleModRegen(bool apply, bool Real)            // eating
             {
                 SpellEntry const *spellProto = GetSpellProto();
                 if (spellProto)
-                    m_target->getHostilRefManager().threatAssist(caster, float(gain) * 0.5f, spellProto);
+                    m_target->getHostileRefManager().threatAssist(caster, float(gain) * 0.5f, spellProto);
             }
         }
     }
@@ -6842,7 +6843,7 @@ void Aura::HandleSchoolAbsorb(bool apply, bool Real)
 
             // apply threat equal to 1/2 healing threat for absorb value
             if (caster->GetTypeId() == TYPEID_PLAYER)
-                m_target->getHostilRefManager().threatAssist(caster, float(m_modifier.m_amount) * 0.25f, GetSpellProto());
+                m_target->getHostileRefManager().threatAssist(caster, float(m_modifier.m_amount) * 0.25f, GetSpellProto());
         }
     }
 }
@@ -7128,7 +7129,7 @@ void Aura::PeriodicTick()
             if (GetSpellProto()->SpellFamilyName == SPELLFAMILY_WARLOCK && (GetSpellProto()->SpellFamilyFlags & 0x8))
             {
                 // find talent max bonus percentage
-                Unit::AuraList const& mClassScriptAuras = pCaster->GetAurasByType(SPELL_AURA_OVERRIDE_CLASS_SCRIPTS);
+                Unit::AuraList const& mClassScriptAuras = pCaster->GetAurasByType(SPELL_AURA_override_CLASS_SCRIPTS);
                 for (Unit::AuraList::const_iterator i = mClassScriptAuras.begin(); i != mClassScriptAuras.end(); ++i)
                 {
                     if ((*i)->GetModifier()->m_miscvalue == 4992 || (*i)->GetModifier()->m_miscvalue == 4993)
@@ -7221,11 +7222,11 @@ void Aura::PeriodicTick()
             pCaster->ProcDamageAndSpell(target, procAttacker, procVictim, procEx, damageInfo.damage, BASE_ATTACK, spellProto);
             uint32 new_damage = pCaster->DealDamage(&damageInfo, DOT, spellProto, false);
 
-            if (!target->isAlive() && pCaster->IsNonMeleeSpellCasted(false))
+            if (!target->isAlive() && pCaster->IsNonMeleeSpellCast(false))
             {
                 for (uint32 i = CURRENT_FIRST_NON_MELEE_SPELL; i < CURRENT_MAX_SPELL; i++)
                 {
-                    if (pCaster->m_currentSpells[i] && pCaster->m_currentSpells[i]->GetSpellInfo()->Id == spellProto->Id)
+                    if (pCaster->m_currentSpells[i] && pCaster->m_currentSpells[i]->GetSpellEntry()->Id == spellProto->Id)
                         pCaster->m_currentSpells[i]->cancel();
                 }
             }
@@ -7237,7 +7238,7 @@ void Aura::PeriodicTick()
             uint32 heal = pCaster->SpellHealingBonus(spellProto, uint32(new_damage * multiplier), DOT, pCaster);
 
             int32 gain = pCaster->ModifyHealth(heal);
-            pCaster->getHostilRefManager().threatAssist(pCaster, gain * 0.5f, spellProto);
+            pCaster->getHostileRefManager().threatAssist(pCaster, gain * 0.5f, spellProto);
 
             // change it
             pCaster->SendHealSpellLog(pCaster, spellProto->Id, heal);
@@ -7293,7 +7294,8 @@ void Aura::PeriodicTick()
             //Do check before because m_modifier.auraName can be invalidate by DealDamage.
             bool procSpell = (m_modifier.m_auraname == SPELL_AURA_PERIODIC_HEAL); // && m_target != pCaster);
 
-            m_target->getHostilRefManager().threatAssist(pCaster, float(gain) * 0.5f, GetSpellProto());
+            if (pCaster->isInCombat())
+                m_target->getHostileRefManager().threatAssist(pCaster, float(gain) * 0.5f, GetSpellProto());
 
             Unit* target = m_target;                        // aura can be deleted in DealDamage
             SpellEntry const* spellProto = GetSpellProto();
@@ -7441,7 +7443,7 @@ void Aura::PeriodicTick()
             int32 gain = m_target->ModifyPower(power,pdamage);
 
             if (Unit* pCaster = GetCaster())
-                m_target->getHostilRefManager().threatAssist(pCaster, float(gain) * 0.5f, GetSpellProto());
+                m_target->getHostileRefManager().threatAssist(pCaster, float(gain) * 0.5f, GetSpellProto());
             break;
         }
         case SPELL_AURA_OBS_MOD_MANA:
@@ -7470,7 +7472,7 @@ void Aura::PeriodicTick()
             int32 gain = m_target->ModifyPower(POWER_MANA, pdamage);
 
             if (Unit* pCaster = GetCaster())
-                m_target->getHostilRefManager().threatAssist(pCaster, float(gain) * 0.5f, GetSpellProto());
+                m_target->getHostileRefManager().threatAssist(pCaster, float(gain) * 0.5f, GetSpellProto());
             break;
         }
         case SPELL_AURA_POWER_BURN_MANA:
@@ -8082,7 +8084,7 @@ void Aura::HandleAuraMeleeAPAttackerBonus(bool apply, bool Real)
         {
             if (Unit* caster = GetCaster())
             {
-                Unit::AuraList overrideClassScriptAuras = caster->GetAurasByType(SPELL_AURA_OVERRIDE_CLASS_SCRIPTS);
+                Unit::AuraList overrideClassScriptAuras = caster->GetAurasByType(SPELL_AURA_override_CLASS_SCRIPTS);
                 for (Unit::AuraList::iterator i = overrideClassScriptAuras.begin(); i != overrideClassScriptAuras.end();)
                 {
                     switch ((*i)->GetSpellProto()->Id)

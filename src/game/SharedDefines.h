@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2005-2008 MaNGOS <http://www.mangosproject.org/>
- *
- * Copyright (C) 2008 Trinity <http://www.trinitycore.org/>
+ * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
+ * Copyright (C) 2008 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2014 Hellground <http://hellground.net/>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -326,7 +326,7 @@ enum SpellCategory
 #define SPELL_ATTR_EX2_NOT_RESET_AUTOSHOT         0x00020000            // 17 Hunters Shot and Stings only have this flag
 #define SPELL_ATTR_EX2_UNK18                      0x00040000            // 18 Only Revive pet - possible req dead pet
 #define SPELL_ATTR_EX2_NOT_NEED_SHAPESHIFT        0x00080000            // 19 does not necessarly need shapeshift
-#define SPELL_ATTR_EX2_UNK20                      0x00100000            // 20
+#define SPELL_ATTR_EX2_FROM_BEHIND                0x00100000            // 20 must be behind target
 #define SPELL_ATTR_EX2_DAMAGE_REDUCED_SHIELD      0x00200000            // 21 for ice blocks, pala immunity buffs, priest absorb shields, but used also for other spells -> not sure!
 #define SPELL_ATTR_EX2_UNK22                      0x00400000            // 22
 #define SPELL_ATTR_EX2_UNK23                      0x00800000            // 23 Only mage Arcane Concentration have this flag
@@ -350,7 +350,7 @@ enum SpellCategory
 #define SPELL_ATTR_EX3_PLAYERS_ONLY               0x00000100            // 8 Player only?
 #define SPELL_ATTR_EX3_TRIGGERED_CAN_TRIGGER_2    0x00000200            // 9 triggered from effect?
 #define SPELL_ATTR_EX3_MAIN_HAND                  0x00000400            // 10 Main hand weapon required
-#define SPELL_ATTR_EX3_BATTLEGROUND               0x00000800            // 11 Can casted only on battleground
+#define SPELL_ATTR_EX3_BATTLEGROUND               0x00000800            // 11 Can cast only on battleground
 #define SPELL_ATTR_EX3_CAST_ON_DEAD               0x00001000            // 12 target is a dead player (not every spell has this flag)
 #define SPELL_ATTR_EX3_UNK13                      0x00002000            // 13
 #define SPELL_ATTR_EX3_UNK14                      0x00004000            // 14 "Honorless Target" only this spells have this flag
@@ -664,7 +664,7 @@ enum SpellEffects
     SPELL_EFFECT_SUMMON_OBJECT_SLOT3       = 106,
     SPELL_EFFECT_SUMMON_OBJECT_SLOT4       = 107,
     SPELL_EFFECT_DISPEL_MECHANIC           = 108,
-    SPELL_EFFECT_SUMMON_DEAD_PET           = 109,
+    SPELL_EFFECT_RESURRECT_PET             = 109,
     SPELL_EFFECT_DESTROY_ALL_TOTEMS        = 110,
     SPELL_EFFECT_DURABILITY_DAMAGE         = 111,
     SPELL_EFFECT_SUMMON_DEMON              = 112,
@@ -2185,6 +2185,7 @@ enum TotemCategory
 
 enum UnitDynFlags
 {
+    UNIT_DYNFLAG_NONE              = 0x0000,
     UNIT_DYNFLAG_LOOTABLE          = 0x0001,
     UNIT_DYNFLAG_TRACK_UNIT        = 0x0002,
     UNIT_DYNFLAG_OTHER_TAGGER      = 0x0004,
@@ -2323,7 +2324,7 @@ enum DiminishingGroup
     DIMINISHING_CONTROL_STUN,                               // Player Controlled stuns
     DIMINISHING_TRIGGER_STUN,                               // By aura proced stuns, usualy chance on hit talents
     DIMINISHING_SLEEP,
-    DIMINISHING_CONTROL_ROOT,                               // Immobilizing effects from casted spells
+    DIMINISHING_CONTROL_ROOT,                               // Immobilizing effects from cast spells
     DIMINISHING_TRIGGER_ROOT,                               // Immobilizing effects from triggered spells like Frostbite
     DIMINISHING_FEAR,                                       // Non-warlock fears
     DIMINISHING_CHARM,
