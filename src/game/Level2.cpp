@@ -2751,6 +2751,7 @@ bool ChatHandler::HandleWpModifyCommand(const char* args)
 
 bool ChatHandler::HandleWpShowCommand(const char* args)
 {
+	/*
     sLog.outDebug("DEBUG: HandleWpShowCommand");
 
     if (!*args)
@@ -3092,6 +3093,7 @@ bool ChatHandler::HandleWpShowCommand(const char* args)
     PSendSysMessage("|cffff33ffDEBUG: wpshow - no valid command found|r");
 
     return true;
+	*/
 }
 
 //////////// WAYPOINT COMMANDS //

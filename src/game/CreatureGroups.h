@@ -82,7 +82,7 @@ class CreatureGroup
 
         void ReachedWaypoint() {  if( m_movingUnits > 0 ) m_movingUnits--; }
         void ClearMovingUnits() { m_movingUnits = 0; }
-        bool AllUnitsReachedWaypoint() const { return m_movingUnits == 0; }
+		bool AllUnitsReachedWaypoint() const;
 };
 
 #endif
